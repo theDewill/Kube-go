@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"fmt"
+	knet "kube-go/kubenet"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,24 +15,21 @@ import (
 var assets embed.FS
 
 func main() {
-	// ctx, cancel := context.WithCancel(context.Background())
-	// NReg, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
-	// if NRegErr != nil {
-	// 	println("Error:", NRegErr.Error())
-	// }
-	// fmt.Printf("N-Reg: %+v \n", *NReg)
-	// discover_err := NReg.Start(ctx)
-	// if discover_err != nil {
-	// 	println("Discovery Error", discover_err.Error())
-	// }
-	// cancel()
-
-	//TMP: stopped with bool temporary
+	ctx, cancel := context.WithCancel(context.Background())
+	Registry, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
+	if NRegErr != nil {
+		println("Error:", NRegErr.Error())
+	}
+	fmt.Printf("N-Reg: %+v \n", *Registry)
+	discover_err := Registry.Start(ctx)
+	if discover_err != nil {
+		println("Discovery Error", discover_err.Error())
+	}
 
 	app := NewApp()
 	err := wails.Run(&options.App{
-		Title:  "kube-go",
-		Width:  1024,
+		Title:  "Kube",
+		Width:  1280,
 		Height: 768,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
@@ -42,7 +42,9 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		println("Error Launching the UI:", err.Error())
 	}
+
+	cancel()
 
 }
