@@ -1,7 +1,6 @@
 package kubenet
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,13 +32,13 @@ const (
 
 // Node represents a discovered machine in the network
 type Node struct {
-	ID          string    `json:"id"`          // Unique identifier for the node
-	IP          string    `json:"ip"`          // IP address of the node
-	Hostname    string    `json:"hostname"`    // Hostname of the node
-	LastSeen    time.Time `json:"last_seen"`   // When this node was last seen
-	Version     int       `json:"version"`     // Protocol version
-	Broadcasted bool      `json:"broadcasted"` // Whether this is our own node
-	Status      string    `json:"status"`      // Node status (online, locked, offline)
+	ID          string    //`json:"id"`          // Unique identifier for the node
+	IP          string    //`json:"ip"`          // IP address of the node
+	Hostname    string    //`json:"hostname"`    // Hostname of the node
+	LastSeen    time.Time //`json:"last_seen"`   // When this node was last seen
+	Version     int       //`json:"version"`     // Protocol version
+	Broadcasted bool      //`json:"broadcasted"` // Whether this is our own node
+	Status      string    //`json:"status"`      // Node status (online, locked, offline)
 }
 
 // NodeRegistry maintains the state of discovered nodes
@@ -53,18 +52,18 @@ type NodeRegistry struct {
 
 // BroadcastMessage is the structure sent over the network
 type BroadcastMessage struct {
-	Version  int    `json:"version"`
-	NodeID   string `json:"node_id"`
-	Hostname string `json:"hostname"`
-	Status   string `json:"status"`
+	Version  int    //`json:"version"`
+	NodeID   string //`json:"node_id"`
+	Hostname string //`json:"hostname"`
+	Status   string //`json:"status"`
 }
 
 // StatusUpdateMessage is the structure sent for status updates
 type StatusUpdateMessage struct {
-	Version   int       `json:"version"`
-	NodeID    string    `json:"node_id"`
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
+	Version   int       //`json:"version"`
+	NodeID    string    //`json:"node_id"`
+	Status    string    //`json:"status"`
+	Timestamp time.Time //`json:"timestamp"`
 }
 
 // NewNodeRegistry creates a new node registry
@@ -101,33 +100,56 @@ func NewNodeRegistry(persistDir string) (*NodeRegistry, error) {
 	return registry, nil
 }
 
+// GetNodesForFrontend returns the current nodes in a format suitable for the Wails frontend
+func (nr *NodeRegistry) GetNodesForFrontend() []map[string]interface{} {
+	nr.RLock()
+	defer nr.RUnlock()
+
+	nodes := make([]map[string]interface{}, 0, len(nr.nodes))
+	for _, node := range nr.nodes {
+		nodeMap := map[string]interface{}{
+			"id":          node.ID,
+			"ip":          node.IP,
+			"hostname":    node.Hostname,
+			"lastSeen":    node.LastSeen.Format(time.RFC3339),
+			"version":     node.Version,
+			"broadcasted": node.Broadcasted,
+			"status":      node.Status,
+			"isLocal":     node.ID == nr.localNode.ID,
+		}
+		nodes = append(nodes, nodeMap)
+	}
+
+	return nodes
+}
+
 // Start begins the broadcasting and listening processes
-func (nr *NodeRegistry) Start(ctx context.Context) error {
+func (nr *NodeRegistry) Start(Done <-chan struct{}) error {
 	// Try to load previous state
 	if err := nr.loadFromDisk(); err != nil {
 		log.Printf("Warning: could not load previous node state: %v", err)
 	}
 
 	// Start the broadcaster
-	go nr.broadcastPresence(ctx)
+	go nr.broadcastPresence(Done)
 
 	// Start the listener
-	go nr.listenForBroadcasts(ctx)
+	go nr.listenForBroadcasts(Done)
 
 	// Start the status update listener
-	go nr.listenForStatusUpdates(ctx)
+	go nr.listenForStatusUpdates(Done)
 
 	// Start the cleanup routine
-	go nr.cleanupStaleNodes(ctx)
+	go nr.cleanupStaleNodes(Done)
 
 	// Start persistence routine
-	go nr.persistRegistryPeriodically(ctx)
+	go nr.persistRegistryPeriodically(Done)
 
 	return nil
 }
 
 // broadcastPresence periodically broadcasts our presence to the network
-func (nr *NodeRegistry) broadcastPresence(ctx context.Context) {
+func (nr *NodeRegistry) broadcastPresence(Done <-chan struct{}) {
 	ticker := time.NewTicker(broadcastInterval)
 	defer ticker.Stop()
 
@@ -175,14 +197,14 @@ func (nr *NodeRegistry) broadcastPresence(ctx context.Context) {
 				}
 			}
 
-		case <-ctx.Done():
+		case <-Done:
 			return
 		}
 	}
 }
 
 // listenForBroadcasts listens for incoming node broadcasts
-func (nr *NodeRegistry) listenForBroadcasts(ctx context.Context) {
+func (nr *NodeRegistry) listenForBroadcasts(Done <-chan struct{}) {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IPv4zero,
 		Port: broadcastPort,
@@ -197,7 +219,7 @@ func (nr *NodeRegistry) listenForBroadcasts(ctx context.Context) {
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-Done:
 			return
 		default:
 			// Set a deadline so we don't block forever
@@ -332,7 +354,7 @@ func (nr *NodeRegistry) propagateStatusChange(status string) error {
 }
 
 // listenForStatusUpdates listens for incoming status update messages
-func (nr *NodeRegistry) listenForStatusUpdates(ctx context.Context) {
+func (nr *NodeRegistry) listenForStatusUpdates(Done <-chan struct{}) {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IPv4zero,
 		Port: statusPort,
@@ -347,7 +369,7 @@ func (nr *NodeRegistry) listenForStatusUpdates(ctx context.Context) {
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-Done:
 			return
 		default:
 			// Set a deadline so we don't block forever
@@ -406,7 +428,7 @@ func (nr *NodeRegistry) AddStatusListener(callback func(string, string)) {
 }
 
 // cleanupStaleNodes periodically removes nodes that haven't been seen recently
-func (nr *NodeRegistry) cleanupStaleNodes(ctx context.Context) {
+func (nr *NodeRegistry) cleanupStaleNodes(Done <-chan struct{}) {
 	ticker := time.NewTicker(nodeExpiration / 2)
 	defer ticker.Stop()
 
@@ -429,14 +451,14 @@ func (nr *NodeRegistry) cleanupStaleNodes(ctx context.Context) {
 			}
 			nr.Unlock()
 
-		case <-ctx.Done():
+		case <-Done:
 			return
 		}
 	}
 }
 
 // persistRegistryPeriodically saves the node registry to disk periodically
-func (nr *NodeRegistry) persistRegistryPeriodically(ctx context.Context) {
+func (nr *NodeRegistry) persistRegistryPeriodically(Done <-chan struct{}) {
 	ticker := time.NewTicker(persistenceInterval)
 	defer ticker.Stop()
 
@@ -447,7 +469,7 @@ func (nr *NodeRegistry) persistRegistryPeriodically(ctx context.Context) {
 				log.Printf("Failed to persist node registry: %v", err)
 			}
 
-		case <-ctx.Done():
+		case <-Done:
 			// Make a final attempt to save before exiting
 			if err := nr.saveToDisk(); err != nil {
 				log.Printf("Failed to persist node registry on shutdown: %v", err)
