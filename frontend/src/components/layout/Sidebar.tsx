@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,7 +16,7 @@ import {
   Server,
   Users,
   PieChart,
-  Snowflake
+  Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -30,12 +29,14 @@ interface SidebarProps {
 export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const handleNavigation = (path: string) => {
     if (path === "Home") {
       navigate("/");
     } else if (path === "Nodes") {
       navigate("/nodes");
+    } else if (path === "Refrigerated") {
+      navigate("/refrigerated");
     } else {
       toast.info(`Navigating to ${path} (coming soon)`);
     }
@@ -44,6 +45,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
   const isActive = (path: string) => {
     if (path === "Home" && location.pathname === "/") return true;
     if (path === "Nodes" && location.pathname === "/nodes") return true;
+    if (path === "Refrigerated" && location.pathname === "/refrigerated") return true;
     return false;
   };
 
@@ -51,70 +53,41 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
     <aside
       className={cn(
         "bg-sidebar text-sidebar-foreground flex flex-col border-r transition-all duration-300",
-        isOpen ? "w-64" : "w-16"
+        isOpen ? "w-64" : "w-16",
       )}
     >
       <div className="flex h-16 items-center px-4 justify-between">
         <div className={cn("flex items-center gap-2", !isOpen && "hidden")}>
           <Snowflake className="h-6 w-6 text-icebox-600" />
-          <span className="font-semibold text-lg">Drive Space</span>
+          <span className="font-semibold text-lg">Kube Drive</span>
         </div>
-        {!isOpen && (
-          <Snowflake className="h-6 w-6 text-icebox-600 mx-auto" />
-        )}
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        {!isOpen && <Snowflake className="h-6 w-6 text-icebox-600 mx-auto" />}
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={toggleSidebar}
           className={cn("absolute right-2", !isOpen && "right-auto left-2")}
         >
-          {isOpen ? (
-            <ChevronLeft className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-          <span className="sr-only">
-            {isOpen ? "Close sidebar" : "Open sidebar"}
-          </span>
+          {isOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <span className="sr-only">{isOpen ? "Close sidebar" : "Open sidebar"}</span>
         </Button>
       </div>
       <ScrollArea className="flex-1 pt-4">
         <nav className="grid gap-1 px-2">
           <SidebarItem
-            icon={Home}
-            label="Home"
+            icon={FolderOpen}
+            label="My Files"
             isOpen={isOpen}
             isActive={isActive("Home")}
             onClick={() => handleNavigation("Home")}
           />
-          <SidebarItem
+          {/* <SidebarItem
             icon={FolderOpen}
             label="My Files"
             isOpen={isOpen}
             isActive={isActive("My Files")}
             onClick={() => handleNavigation("My Files")}
-          />
-          <SidebarItem
-            icon={Share2}
-            label="Shared"
-            isOpen={isOpen}
-            isActive={isActive("Shared")}
-            onClick={() => handleNavigation("Shared")}
-          />
-          <SidebarItem
-            icon={Star}
-            label="Starred"
-            isOpen={isOpen}
-            isActive={isActive("Starred")}
-            onClick={() => handleNavigation("Starred")}
-          />
-          <SidebarItem
-            icon={Clock}
-            label="Recent"
-            isOpen={isOpen}
-            isActive={isActive("Recent")}
-            onClick={() => handleNavigation("Recent")}
-          />
+          /> */}
           <SidebarItem
             icon={Snowflake}
             label="Refrigerated"
@@ -123,21 +96,40 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             onClick={() => handleNavigation("Refrigerated")}
           />
           <SidebarItem
+            icon={Share2}
+            label="Shared"
+            isOpen={isOpen}
+            isActive={isActive("Shared")}
+            onClick={() => handleNavigation("Shared")}
+          />
+          {/* <SidebarItem
+            icon={Star}
+            label="Starred"
+            isOpen={isOpen}
+            isActive={isActive("Starred")}
+            onClick={() => handleNavigation("Starred")}
+          /> */}
+          {/* <SidebarItem
+            icon={Clock}
+            label="Recent"
+            isOpen={isOpen}
+            isActive={isActive("Recent")}
+            onClick={() => handleNavigation("Recent")}
+          /> */}
+          <SidebarItem
             icon={Trash2}
             label="Trash"
             isOpen={isOpen}
             isActive={isActive("Trash")}
             onClick={() => handleNavigation("Trash")}
           />
-          
+
           <Separator className="my-4" />
-          
+
           <div className={cn("px-4 py-2", !isOpen && "hidden")}>
-            <h3 className="text-xs font-medium text-muted-foreground">
-              Administration
-            </h3>
+            <h3 className="text-xs font-medium text-muted-foreground">Administration</h3>
           </div>
-          
+
           <SidebarItem
             icon={Users}
             label="Users"
@@ -147,7 +139,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
           />
           <SidebarItem
             icon={Server}
-            label="Nodes"
+            label="Network"
             isOpen={isOpen}
             isActive={isActive("Nodes")}
             onClick={() => handleNavigation("Nodes")}
@@ -159,13 +151,13 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             isActive={isActive("Storage")}
             onClick={() => handleNavigation("Storage")}
           />
-          <SidebarItem
+          {/* <SidebarItem
             icon={PieChart}
             label="Analytics"
             isOpen={isOpen}
             isActive={isActive("Analytics")}
             onClick={() => handleNavigation("Analytics")}
-          />
+          /> */}
           <SidebarItem
             icon={Settings}
             label="Settings"
@@ -175,11 +167,8 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
           />
         </nav>
       </ScrollArea>
-      
-      <div className={cn(
-        "border-t p-4",
-        !isOpen && "p-2"
-      )}>
+
+      <div className={cn("border-t p-4", !isOpen && "p-2")}>
         <div className="flex items-center gap-3">
           <div className="relative">
             <HardDrive className="h-5 w-5 text-muted-foreground" />
@@ -188,7 +177,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
           {isOpen && (
             <div className="space-y-1">
               <p className="text-xs font-medium leading-none">Storage</p>
-              <p className="text-xs text-muted-foreground">45% used (450 GB / 1 TB)</p>
+              <p className="text-xs text-muted-foreground">24% used (1.2GB / 5GB)</p>
             </div>
           )}
         </div>
@@ -209,10 +198,7 @@ function SidebarItem({ icon: Icon, label, isOpen, isActive = false, onClick }: S
   return (
     <Button
       variant={isActive ? "secondary" : "ghost"}
-      className={cn(
-        "w-full justify-start",
-        !isOpen && "justify-center px-0"
-      )}
+      className={cn("w-full justify-start", !isOpen && "justify-center px-0")}
       onClick={onClick}
     >
       <Icon className={cn("h-5 w-5", isOpen && "mr-2")} />

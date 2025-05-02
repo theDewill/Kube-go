@@ -15,13 +15,7 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	Registry, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
-	if NRegErr != nil {
-		println("Error Creating Registry:", NRegErr.Error())
-	}
-	return &App{
-		register: Registry,
-	}
+	return &App{}
 }
 
 // startup is called when the app starts. The context is saved

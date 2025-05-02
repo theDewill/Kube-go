@@ -1,29 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { Network, Server, User, Link, AlertCircle } from "lucide-react";
+import { Server, User, Lock, AlertCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
+// Define the Node type based on your Golang struct
+interface Node {
+  id: string;
+  ip: string;
+  hostname: string;
+  lastSeen: string;
+  version: number;
+  broadcasted: boolean;
+  status: string;
+  isLocal: boolean;
+}
 
-// Mock data for nodes in the network
-const mockNodes = [
-  { id: "node-1", name: "Main Server", type: "server", status: "online", isClickable: true },
-  { id: "node-2", name: "Development Server", type: "server", status: "online", isClickable: true },
-  { id: "node-3", name: "Backup Server", type: "server", status: "offline", isClickable: false },
-  { id: "user-1", name: "John Doe", type: "user", status: "online", isClickable: true },
-  { id: "user-2", name: "Jane Smith", type: "user", status: "online", isClickable: true },
-  { id: "user-3", name: "Mark Johnson", type: "user", status: "online", isClickable: true },
-  { id: "user-4", name: "Sarah Williams", type: "user", status: "away", isClickable: false },
-  { id: "user-5", name: "Robert Brown", type: "user", status: "offline", isClickable: false },
-];
-
-// Mock connections between nodes
-const mockConnections = [
-  { source: "node-1", target: "node-2" },
-  { source: "node-1", target: "node-3" },
-  { source: "node-1", target: "user-1" },
-  { source: "node-1", target: "user-2" },
-  { source: "node-2", target: "user-3" },
-  { source: "node-2", target: "user-4" },
-  { source: "node-3", target: "user-5" },
-];
+// Connections will be calculated based on the network topology
+interface Connection {
+  source: string;
+  target: string;
+  isActive: boolean;
+}
 
 interface NodeNetworkProps {
   onNodeClick: (nodeId: string) => void;
@@ -32,43 +28,129 @@ interface NodeNetworkProps {
 export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<Array<any>>([]);
-  const [connections, setConnections] = useState<Array<any>>([]);
+  const [connections, setConnections] = useState<Array<Connection>>([]);
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Position nodes in a force-directed layout simulation
-    // For simplicity, we'll use fixed positions in this example
+  // Function to fetch nodes from the backend
+  const fetchNodes = async () => {
+    try {
+      setLoading(true);
+      // Call the Go function exposed by Wails
+      const nodesData = await GetNodesForFrontend();
+
+      // Process nodes for visualization
+      processNodes(nodesData);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch nodes:", err);
+      setError("Failed to fetch network nodes. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  // Process nodes and create visualization data
+  const processNodes = (nodesData: Node[]) => {
+    // Transform backend nodes to visual nodes
     const center = {
       x: containerSize.width / 2,
       y: containerSize.height / 2,
     };
 
-    // Position server nodes in a triangle in the center
-    const serverNodes = mockNodes.filter((node) => node.type === "server");
-    const serverPositions = serverNodes.map((node, index) => {
-      const angle = index * ((2 * Math.PI) / serverNodes.length) - Math.PI / 2;
-      const radius = 100;
+    // Find local node
+    const localNode = nodesData.find((node) => node.isLocal);
+
+    // Position nodes in a network layout
+    // Place local node at center
+    const positionedNodes = nodesData.map((node, index) => {
+      // Default to user type, we'll determine by hostname pattern if it's a server
+      const nodeType = node.hostname.toLowerCase().includes("server") ? "server" : "user";
+
+      let x, y;
+
+      if (node.isLocal) {
+        // Local node goes at the center
+        x = center.x;
+        y = center.y;
+      } else {
+        // Calculate positions in a circle around the local node
+        const totalNodes = nodesData.length - 1; // Excluding local node
+        const nodeIndex = nodesData.indexOf(node) - (node.id > localNode?.id ? 1 : 0);
+        const angle = nodeIndex * ((2 * Math.PI) / totalNodes) - Math.PI / 2;
+        const radius = 250;
+
+        x = center.x + radius * Math.cos(angle);
+        y = center.y + radius * Math.sin(angle);
+      }
+
+      // Map status from backend to what the UI expects
+      let uiStatus = "offline";
+      switch (node.status) {
+        case "online":
+          uiStatus = "online";
+          break;
+        case "locked":
+          uiStatus = "away";
+          break;
+        case "offline":
+        default:
+          uiStatus = "offline";
+          break;
+      }
+
       return {
         ...node,
-        x: center.x + radius * Math.cos(angle),
-        y: center.y + radius * Math.sin(angle),
+        x,
+        y,
+        type: nodeType,
+        name: node.hostname,
+        status: uiStatus,
+        isClickable: uiStatus !== "offline",
       };
     });
 
-    // Position user nodes in a circle around the servers
-    const userNodes = mockNodes.filter((node) => node.type === "user");
-    const userPositions = userNodes.map((node, index) => {
-      const angle = index * ((2 * Math.PI) / userNodes.length) - Math.PI / 2;
-      const radius = 250;
-      return {
-        ...node,
-        x: center.x + radius * Math.cos(angle),
-        y: center.y + radius * Math.sin(angle),
-      };
+    setNodes(positionedNodes);
+
+    // Generate connections
+    // For a simple network, connect local node to all others
+    const newConnections: Connection[] = [];
+
+    if (localNode) {
+      positionedNodes.forEach((node) => {
+        if (!node.isLocal) {
+          newConnections.push({
+            source: localNode.id,
+            target: node.id,
+            isActive: node.status !== "offline",
+          });
+        }
+      });
+    }
+
+    // Also add some random connections between other nodes for visualization appeal
+    positionedNodes.forEach((source, i) => {
+      positionedNodes.forEach((target, j) => {
+        if (i !== j && !source.isLocal && !target.isLocal && Math.random() > 0.75) {
+          newConnections.push({
+            source: source.id,
+            target: target.id,
+            isActive: source.status !== "offline" && target.status !== "offline",
+          });
+        }
+      });
     });
 
-    setNodes([...serverPositions, ...userPositions]);
-    setConnections(mockConnections);
+    setConnections(newConnections);
+  };
+
+  // Initialize and set up polling
+  useEffect(() => {
+    // Initial fetch
+    fetchNodes();
+
+    // Set up polling interval (every 5 seconds)
+    const interval = setInterval(fetchNodes, 5000);
 
     // Handle window resize
     const updateSize = () => {
@@ -82,7 +164,19 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
 
     updateSize();
     window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", updateSize);
+    };
+  }, []);
+
+  // Update layout when container size changes
+  useEffect(() => {
+    if (nodes.length > 0) {
+      fetchNodes(); // Re-process nodes with new container size
+    }
   }, [containerSize.width, containerSize.height]);
 
   // Draw a straight line between two nodes
@@ -100,6 +194,34 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
     };
   };
 
+  if (loading && nodes.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="mt-4 text-lg font-medium">Discovering network nodes...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && nodes.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="flex flex-col items-center text-destructive">
+          <AlertCircle className="h-12 w-12" />
+          <div className="mt-4 text-lg font-medium">{error}</div>
+          <button
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
+            onClick={fetchNodes}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full relative overflow-hidden" ref={containerRef}>
       <div className="absolute inset-0">
@@ -112,7 +234,7 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
             if (!sourceNode || !targetNode) return null;
 
             const line = drawLine(sourceNode, targetNode);
-            const isActive = sourceNode.status === "online" && targetNode.status === "online";
+            const isActive = connection.isActive;
 
             return (
               <line
@@ -136,12 +258,12 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
             if (!sourceNode || !targetNode) return null;
 
             const line = drawLine(sourceNode, targetNode);
-            const isActive = sourceNode.status === "online" && targetNode.status === "online";
+            const isActive = connection.isActive;
 
             // Calculate the angle of the line
             const angle = (Math.atan2(line.y2 - line.y1, line.x2 - line.x1) * 180) / Math.PI;
 
-            // Calculate the position of the arrowhead (10px before the target)
+            // Calculate the position of the arrowhead
             const arrowLength = 10;
             const dx = line.x2 - line.x1;
             const dy = line.y2 - line.y1;
@@ -165,9 +287,38 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
 
         {/* Render nodes */}
         {nodes.map((node) => {
-          const isClickable = node.status === "online" && node.isClickable;
+          const isClickable = node.status !== "offline" && node.isClickable;
           const isServer = node.type === "server";
-          const IconComponent = isServer ? Server : User;
+          const isLocked = node.status === "away";
+
+          // Choose the appropriate icon
+          let IconComponent;
+          if (isServer) {
+            IconComponent = Server;
+          } else if (isLocked) {
+            IconComponent = Lock;
+          } else {
+            IconComponent = User;
+          }
+
+          // Special styling for local node
+          const nodeColors = node.isLocal
+            ? {
+                bg: "bg-green-100 dark:bg-green-900",
+                text: "text-green-600 dark:text-green-400",
+                border: "border-4 border-green-500",
+              }
+            : isServer
+              ? {
+                  bg: "bg-purple-100 dark:bg-purple-900",
+                  text: "text-purple-600 dark:text-purple-400",
+                  border: "",
+                }
+              : {
+                  bg: "bg-blue-100 dark:bg-blue-900",
+                  text: "text-blue-600 dark:text-blue-400",
+                  border: "",
+                };
 
           return (
             <TooltipProvider key={node.id}>
@@ -184,20 +335,8 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                     }}
                     onClick={() => isClickable && onNodeClick(node.id)}
                   >
-                    <div
-                      className={`${
-                        isServer
-                          ? "bg-purple-100 dark:bg-purple-900"
-                          : "bg-blue-100 dark:bg-blue-900"
-                      } p-4 rounded-full`}
-                    >
-                      <IconComponent
-                        className={`h-8 w-8 ${
-                          isServer
-                            ? "text-purple-600 dark:text-purple-400"
-                            : "text-blue-600 dark:text-blue-400"
-                        }`}
-                      />
+                    <div className={`${nodeColors.bg} p-4 rounded-full ${nodeColors.border}`}>
+                      <IconComponent className={`h-8 w-8 ${nodeColors.text}`} />
                     </div>
                     {node.status === "offline" && (
                       <div className="absolute -top-1 -right-1 bg-red-500 p-1 rounded-full">
@@ -210,13 +349,18 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                       </div>
                     )}
                     <div className="absolute mt-10 text-center font-medium text-sm whitespace-nowrap">
-                      {node.name}
+                      {node.hostname}
+                      {node.isLocal ? " (You)" : ""}
                     </div>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="flex flex-col">
-                    <span className="font-bold">{node.name}</span>
+                    <span className="font-bold">
+                      {node.hostname}
+                      {node.isLocal ? " (You)" : ""}
+                    </span>
+                    <span className="text-xs">IP: {node.ip}</span>
                     <span className="text-xs capitalize">Type: {node.type}</span>
                     <span
                       className={`text-xs ${
@@ -228,6 +372,9 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                       }`}
                     >
                       Status: {node.status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Last seen: {new Date(node.lastSeen).toLocaleTimeString()}
                     </span>
                     {isClickable ? (
                       <span className="text-xs text-muted-foreground">Click to connect</span>

@@ -101,7 +101,7 @@ func NewNodeRegistry(persistDir string) (*NodeRegistry, error) {
 }
 
 // GetNodesForFrontend returns the current nodes in a format suitable for the Wails frontend
-func (nr *NodeRegistry) GetNodesForFrontend() []map[string]interface{} {
+func (nr *NodeRegistry) GetNodesForFrontend_old() []map[string]interface{} {
 	nr.RLock()
 	defer nr.RUnlock()
 
@@ -116,6 +116,59 @@ func (nr *NodeRegistry) GetNodesForFrontend() []map[string]interface{} {
 			"broadcasted": node.Broadcasted,
 			"status":      node.Status,
 			"isLocal":     node.ID == nr.localNode.ID,
+		}
+		nodes = append(nodes, nodeMap)
+	}
+
+	return nodes
+}
+
+// GetNodesForFrontend returns the current nodes in a format suitable for the Wails frontend
+func (nr *NodeRegistry) GetNodesForFrontend() []map[string]interface{} {
+	nr.RLock()
+	defer nr.RUnlock()
+
+	// Get current time to calculate node status age
+	now := time.Now()
+
+	nodes := make([]map[string]interface{}, 0, len(nr.nodes))
+	for _, node := range nr.nodes {
+		// Calculate time since last seen for frontend display
+		lastSeenDuration := now.Sub(node.LastSeen)
+		lastSeenMinutes := int(lastSeenDuration.Minutes())
+
+		var lastSeenText string
+		if lastSeenMinutes < 1 {
+			lastSeenText = "just now"
+		} else if lastSeenMinutes == 1 {
+			lastSeenText = "1 minute ago"
+		} else if lastSeenMinutes < 60 {
+			lastSeenText = fmt.Sprintf("%d minutes ago", lastSeenMinutes)
+		} else {
+			lastSeenHours := lastSeenMinutes / 60
+			if lastSeenHours == 1 {
+				lastSeenText = "1 hour ago"
+			} else {
+				lastSeenText = fmt.Sprintf("%d hours ago", lastSeenHours)
+			}
+		}
+
+		// Determine if the node is connected to this node
+		isConnected := node.Status == StatusOnline || node.Status == StatusLocked
+
+		// Create frontend-friendly node object
+		nodeMap := map[string]interface{}{
+			"id":            node.ID,
+			"ip":            node.IP,
+			"hostname":      node.Hostname,
+			"lastSeen":      node.LastSeen.Format(time.RFC3339), // ISO format for precise timestamp
+			"lastSeenText":  lastSeenText,                       // Human-readable format
+			"version":       node.Version,
+			"broadcasted":   node.Broadcasted,
+			"status":        node.Status,
+			"isLocal":       node.ID == nr.localNode.ID,
+			"isConnected":   isConnected,
+			"connectedTime": lastSeenDuration.String(),
 		}
 		nodes = append(nodes, nodeMap)
 	}
@@ -214,9 +267,7 @@ func (nr *NodeRegistry) listenForBroadcasts(Done <-chan struct{}) {
 		return
 	}
 	defer conn.Close()
-
 	buffer := make([]byte, 1024)
-
 	for {
 		select {
 		case <-Done:
@@ -235,7 +286,6 @@ func (nr *NodeRegistry) listenForBroadcasts(Done <-chan struct{}) {
 				}
 				continue
 			}
-
 			// Skip our own broadcasts
 			if addr.IP.String() == nr.localNode.IP {
 				continue
@@ -246,13 +296,11 @@ func (nr *NodeRegistry) listenForBroadcasts(Done <-chan struct{}) {
 				log.Printf("Failed to unmarshal broadcast message from %s: %v", addr, err)
 				continue
 			}
-
 			// Validate protocol version
 			if msg.Version != protocolVersion {
 				log.Printf("Received message with incompatible version %d from %s", msg.Version, addr)
 				continue
 			}
-
 			// Update the registry
 			nr.Lock()
 			node, exists := nr.nodes[msg.NodeID]

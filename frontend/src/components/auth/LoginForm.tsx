@@ -1,10 +1,16 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Camera, Key, LockKeyhole, Mail, UserCircle2 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
@@ -16,7 +22,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     // Simulate login
     setTimeout(() => {
       setIsLoading(false);
@@ -31,7 +37,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
 
   const handleFacialLogin = () => {
     setIsLoading(true);
-    
+
     // Simulate facial recognition
     setTimeout(() => {
       setIsLoading(false);
@@ -43,10 +49,8 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl font-bold">Drive Space</CardTitle>
-        <CardDescription>
-          On-premise storage solution
-        </CardDescription>
+        <CardTitle className="text-2xl font-bold">Kube Login</CardTitle>
+        <CardDescription>On-premise storage solution</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="credentials">
@@ -60,17 +64,17 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
               Facial Recognition
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="credentials">
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    placeholder="name@example.com" 
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
                     className="pl-10"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -81,9 +85,9 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <LockKeyhole className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="password" 
-                    type="password" 
+                  <Input
+                    id="password"
+                    type="password"
                     className="pl-10"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -95,7 +99,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
               </Button>
             </form>
           </TabsContent>
-          
+
           <TabsContent value="facial">
             <div className="space-y-4 text-center">
               <div className="w-32 h-32 mx-auto rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center">
@@ -104,7 +108,11 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
               <p className="text-sm text-muted-foreground">
                 Position your face in front of the camera to login
               </p>
-              <Button onClick={handleFacialLogin} className="w-full" disabled={isLoading}>
+              <Button
+                onClick={handleFacialLogin}
+                className="w-full bg-green-500 hover:bg-green-700"
+                disabled={isLoading}
+              >
                 {isLoading ? "Scanning..." : "Start Scan"}
               </Button>
             </div>
@@ -112,9 +120,9 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
         </Tabs>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
-        <div className="text-xs text-muted-foreground text-center">
+        {/* <div className="text-xs text-muted-foreground text-center">
           This is a demo application. Any credentials will work.
-        </div>
+        </div> */}
       </CardFooter>
     </Card>
   );
