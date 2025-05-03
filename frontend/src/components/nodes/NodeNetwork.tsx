@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Server, User, Lock, AlertCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
+
 // Define the Node type based on your Golang struct
 interface Node {
   id: string;
