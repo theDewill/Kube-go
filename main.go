@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"kube-go/kfiles"
 	knet "kube-go/kubenet"
+	RFG "kube-go/refrigirator"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -16,8 +17,8 @@ import (
 var assets embed.FS
 
 func main() {
-	//ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
+
+	RFG := RFG.CreateRefrigirator("1.0", "no index")
 	Registry, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
 	if NRegErr != nil {
 		println("Error:", NRegErr.Error())
@@ -45,6 +46,7 @@ func main() {
 			app,
 			Registry,
 			fileBrowser,
+			RFG,
 		},
 	})
 

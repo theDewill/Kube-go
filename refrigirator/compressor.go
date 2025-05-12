@@ -1,4 +1,4 @@
-package main
+package refrigirator
 
 import (
 	"bytes"
@@ -860,7 +860,19 @@ func decompressFile(inputPath, outputPath string) error {
 	return nil
 }
 
-func Refrigirator() {
+type Refrigirator struct {
+	version    string
+	indexCache any
+}
+
+func CreateRefrigirator(version string, indexdb any) *Refrigirator {
+	return &Refrigirator{
+		version:    version,
+		indexCache: indexdb,
+	}
+}
+
+func (RG *Refrigirator) Refrigirate(mode string) {
 	// Parse command-line flags
 	modePtr := flag.String("mode", "", "Operation mode: 'compress', 'decompress', 'check', 'verify', or 'benchmark'")
 	inputPtr := flag.String("input", "", "Input file path")
