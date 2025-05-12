@@ -2,7 +2,10 @@ package main
 
 import (
 	"embed"
+	"fmt"
+	"kube-go/kfiles"
 	knet "kube-go/kubenet"
+	"log"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -20,8 +23,15 @@ func main() {
 		println("Error:", NRegErr.Error())
 	}
 
+	fileBrowser, fbErr := kfiles.LaunchFileBrowser()
+	if fbErr != nil {
+		log.Fatalf("Error initializing File Browser: %v", fbErr)
+	}
+	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir)
+
 	app := NewApp()
 	app.register = Registry
+	app.fileBrowser = fileBrowser
 	err := wails.Run(&options.App{
 		Title:  "Kube",
 		Width:  1280,
@@ -34,6 +44,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 			Registry,
+			fileBrowser,
 		},
 	})
 

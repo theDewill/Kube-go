@@ -3,14 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"kube-go/kfiles"
 	knet "kube-go/kubenet"
 )
 
 // App struct
 type App struct {
-	ctx        context.Context
-	ctx_cancel context.CancelFunc
-	register   *knet.NodeRegistry
+	ctx         context.Context
+	ctx_cancel  context.CancelFunc
+	register    *knet.NodeRegistry
+	fileBrowser *kfiles.FileBrowser
 }
 
 // NewApp creates a new App application struct
