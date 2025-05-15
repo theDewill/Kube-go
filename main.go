@@ -18,13 +18,13 @@ var assets embed.FS
 
 func main() {
 
-	RFG := RFG.CreateRefrigirator("1.0", "no index")
 	Registry, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
 	if NRegErr != nil {
 		println("Error:", NRegErr.Error())
 	}
 
 	fileBrowser, fbErr := kfiles.LaunchFileBrowser()
+	RFG := RFG.CreateRefrigirator("1.0", "no index", fileBrowser)
 	if fbErr != nil {
 		log.Fatalf("Error initializing File Browser: %v", fbErr)
 	}

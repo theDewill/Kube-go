@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	FB "kube-go/kfiles"
 	"math"
 	"os"
 	"path/filepath"
@@ -13,6 +14,20 @@ import (
 	"sync"
 	"time"
 )
+
+type Refrigirator struct {
+	version     string
+	indexCache  any //here must be file data cache
+	filemanager *FB.FileBrowser
+}
+
+func CreateRefrigirator(version string, indexdb any, fm *(FB.FileBrowser)) *Refrigirator {
+	return &Refrigirator{
+		version:     version,
+		indexCache:  indexdb,
+		filemanager: fm,
+	}
+}
 
 // Constants for our compression format
 const (
@@ -860,90 +875,74 @@ func decompressFile(inputPath, outputPath string) error {
 	return nil
 }
 
-type Refrigirator struct {
-	version    string
-	indexCache any
-}
+func (RG *Refrigirator) Refrigirate(modePtr string, inputPtr string, outputPtr string) {
 
-func CreateRefrigirator(version string, indexdb any) *Refrigirator {
-	return &Refrigirator{
-		version:    version,
-		indexCache: indexdb,
-	}
-}
-
-func (RG *Refrigirator) Refrigirate(mode string) {
-	// Parse command-line flags
-	modePtr := flag.String("mode", "", "Operation mode: 'compress', 'decompress', 'check', 'verify', or 'benchmark'")
-	inputPtr := flag.String("input", "", "Input file path")
-	outputPtr := flag.String("output", "", "Output file path (optional, will be determined automatically if not provided)")
-	//segmentSizePtr := flag.Int("segment-size", 0, "Override the automatic segment size (optional)")
 	debugPtr := flag.Bool("debug", false, "Enable debug mode")
 	flag.Parse()
 
 	debugMode = *debugPtr
 
 	// Validate inputs
-	if *modePtr != "compress" && *modePtr != "decompress" && *modePtr != "check" && *modePtr != "verify" && *modePtr != "benchmark" {
+	if modePtr != "compress" && modePtr != "decompress" && modePtr != "check" && modePtr != "verify" && modePtr != "benchmark" {
 		fmt.Println("Error: mode must be 'compress', 'decompress', 'check', 'verify', or 'benchmark'")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	if *inputPtr == "" {
+	if inputPtr == "" {
 		fmt.Println("Error: input file path must be provided")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	// Determine output file path if not provided
-	outputPath := *outputPtr
+	outputPath := outputPtr
 	if outputPath == "" {
-		if *modePtr == "compress" {
-			outputPath = *inputPtr + ".kbe"
-		} else if *modePtr == "decompress" {
-			if filepath.Ext(*inputPtr) == ".kbe" {
-				outputPath = (*inputPtr)[:len(*inputPtr)-4] // Remove .kbe extension
+		if modePtr == "compress" {
+			outputPath = inputPtr + ".kbe"
+		} else if modePtr == "decompress" {
+			if filepath.Ext(inputPtr) == ".kbe" {
+				outputPath = (inputPtr)[:len(inputPtr)-4] // Remove .kbe extension
 			} else {
-				outputPath = *inputPtr + ".decompressed" // Fallback if input doesn't have .kbe extension
+				outputPath = inputPtr + ".decompressed" // Fallback if input doesn't have .kbe extension
 			}
 		}
 	}
 
 	// Perform the operation
-	if *modePtr == "compress" {
-		err := compressFile(*inputPtr, outputPath)
+	if modePtr == "compress" {
+		err := compressFile(inputPtr, outputPath)
 		if err != nil {
 			fmt.Printf("Compression error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Successfully compressed %s to %s\n", *inputPtr, outputPath)
-	} else if *modePtr == "decompress" {
-		err := decompressFile(*inputPtr, outputPath)
+		fmt.Printf("Successfully compressed %s to %s\n", inputPtr, outputPath)
+	} else if modePtr == "decompress" {
+		err := decompressFile(inputPtr, outputPath)
 		if err != nil {
 			fmt.Printf("Decompression error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Successfully decompressed %s to %s\n", *inputPtr, outputPath)
-	} else if *modePtr == "check" {
+		fmt.Printf("Successfully decompressed %s to %s\n", inputPtr, outputPath)
+	} else if modePtr == "check" {
 		// Just verify file integrity without decompressing
-		valid, err := verifyFileIntegrity(*inputPtr)
+		valid, err := verifyFileIntegrity(inputPtr)
 		if err != nil {
 			fmt.Printf("File integrity check failed: %v\n", err)
 			os.Exit(1)
 		}
 		if valid {
-			fmt.Printf("File %s passed integrity check\n", *inputPtr)
+			fmt.Printf("File %s passed integrity check\n", inputPtr)
 		} else {
-			fmt.Printf("File %s failed integrity check\n", *inputPtr)
+			fmt.Printf("File %s failed integrity check\n", inputPtr)
 			os.Exit(1)
 		}
-	} else if *modePtr == "verify" {
-		originalPath := *inputPtr
+	} else if modePtr == "verify" {
+		originalPath := inputPtr
 		compressedPath := originalPath + ".kbe"
 		decompressedPath := originalPath + ".decompressed"
-		if *outputPtr != "" {
-			decompressedPath = *outputPtr
+		if outputPtr != "" {
+			decompressedPath = outputPtr
 		}
 
 		// Compress the original file
@@ -976,8 +975,8 @@ func (RG *Refrigirator) Refrigirate(mode string) {
 			fmt.Println("Verification failed: Original and decompressed files differ")
 			os.Exit(1)
 		}
-	} else if *modePtr == "benchmark" {
-		err := benchmarkCompression(*inputPtr)
+	} else if modePtr == "benchmark" {
+		err := benchmarkCompression(inputPtr)
 		if err != nil {
 			fmt.Printf("Benchmark error: %v\n", err)
 			os.Exit(1)

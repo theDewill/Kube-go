@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, Key, LockKeyhole, Mail, UserCircle2 } from "lucide-react";
+import { Camera, Key, LockKeyhole, Mail } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -18,6 +18,9 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [cameraActive, setCameraActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +38,41 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
     }, 1500);
   };
 
+  const startCamera = async () => {
+    try {
+      // Stop any previous stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+        setCameraActive(true);
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      toast.error("Could not access camera. Please check permissions.");
+      setCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setCameraActive(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+  };
+
   const handleFacialLogin = () => {
     setIsLoading(true);
 
@@ -42,9 +80,26 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
     setTimeout(() => {
       setIsLoading(false);
       toast.success("Facial recognition successful");
+      stopCamera();
       onLogin();
     }, 2000);
   };
+
+  // Handle tab changes to start/stop camera
+  const handleTabChange = (value: string) => {
+    if (value === "facial") {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  };
+
+  // Clean up camera on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -53,15 +108,15 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
         <CardDescription>On-premise storage solution</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="credentials">
+        <Tabs defaultValue="facial" onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="credentials">
-              <Key className="h-4 w-4 mr-2" />
-              Credentials
-            </TabsTrigger>
             <TabsTrigger value="facial">
               <Camera className="h-4 w-4 mr-2" />
               Facial Recognition
+            </TabsTrigger>
+            <TabsTrigger value="credentials">
+              <Key className="h-4 w-4 mr-2" />
+              Credentials
             </TabsTrigger>
           </TabsList>
 
@@ -102,8 +157,20 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
 
           <TabsContent value="facial">
             <div className="space-y-4 text-center">
-              <div className="w-32 h-32 mx-auto rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center">
-                <UserCircle2 className="h-16 w-16 text-muted-foreground" />
+              <div className="w-32 h-32 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
+                {cameraActive ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="min-w-full min-h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full w-full">
+                    <Camera className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 Position your face in front of the camera to login
