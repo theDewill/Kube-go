@@ -1,246 +1,344 @@
-// package security
+package security
 
-// import (
-// 	"fmt"
-// 	"os"
-// 	"os/signal"
-// 	"time"
+import (
+	"fmt"
+	"os"
+	"sync"
+	"time"
 
-// 	"github.com/Kagami/go-face"
-// 	"gocv.io/x/gocv"
-// )
+	"github.com/Kagami/go-face"
+	"gocv.io/x/gocv"
+)
 
-// const (
-// 	// Path to the directory with the model data
-// 	modelDir = "./models"
-// 	// Threshold for face recognition confidence
-// 	recognitionThreshold = 0.6
-// 	// Checking interval in seconds
-// 	checkInterval = 30
-// 	// Sample size to train the model
-// 	sampleSize = 5
-// )
+const (
+	// Path to the directory with the model data
+	modelDir = "./models"
+	// Threshold for face recognition confidence
+	recognitionThreshold = 0.6
+	// Sample size to train the model
+	sampleSize = 5
+)
 
-// type FaceRecognitionSystem struct {
-// 	recognizer      *face.Recognizer
-// 	samples         []face.Descriptor
-// 	camera          *gocv.VideoCapture
-// 	trainedPersonID int32
-// 	isLocked        bool
-// }
+// User represents a registered user in the system
+type User struct {
+	ID       string
+	Email    string
+	Samples  []face.Descriptor
+	Created  time.Time
+	Modified time.Time
+}
 
-// func NewFaceRecognitionSystem() (*FaceRecognitionSystem, error) {
-// 	// Initialize face recognizer
-// 	rec, err := face.NewRecognizer(modelDir)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("cannot initialize recognizer: %v", err)
-// 	}
+// FacialSystem is the main struct for the facial recognition system
+// that will be exported to the frontend
+type FacialSystem struct {
+	recognizer       *face.Recognizer
+	camera           *gocv.VideoCapture
+	users            map[string]*User
+	currentUser      *User
+	isInitialized    bool
+	usersStoragePath string
+	mu               sync.Mutex
+}
 
-// 	// Initialize camera
-// 	cam, err := gocv.OpenVideoCapture(0)
-// 	if err != nil {
-// 		rec.Close()
-// 		return nil, fmt.Errorf("cannot open camera: %v", err)
-// 	}
+// NewFacialSystem creates a new facial recognition system
+func NewFacialSystem(usersPath string) (*FacialSystem, error) {
+	// Check if model directory exists
+	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("model directory '%s' does not exist", modelDir)
+	}
 
-// 	return &FaceRecognitionSystem{
-// 		recognizer:      rec,
-// 		camera:          cam,
-// 		trainedPersonID: 0,
-// 		isLocked:        false,
-// 	}, nil
-// }
+	// Initialize face recognizer
+	rec, err := face.NewRecognizer(modelDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize recognizer: %v", err)
+	}
 
-// func (frs *FaceRecognitionSystem) Close() {
-// 	if frs.camera != nil {
-// 		frs.camera.Close()
-// 	}
-// 	if frs.recognizer != nil {
-// 		frs.recognizer.Close()
-// 	}
-// }
+	// We don't initialize the camera here as it will be initialized on demand
+	// to avoid keeping it open all the time
 
-// func (frs *FaceRecognitionSystem) TrainModel() error {
-// 	fmt.Println("Training model. Please sit in front of the camera.")
-// 	time.Sleep(3 * time.Second) // Give time for the user to prepare
+	fs := &FacialSystem{
+		recognizer:       rec,
+		users:            make(map[string]*User),
+		isInitialized:    true,
+		usersStoragePath: usersPath,
+	}
 
-// 	var samples []face.Descriptor
+	// Load existing users if available
+	if err := fs.loadUsers(); err != nil {
+		fmt.Printf("Warning: Could not load users: %v\n", err)
+	}
 
-// 	// Capture multiple samples for better recognition
-// 	for i := 0; i < sampleSize; i++ {
-// 		fmt.Printf("Capturing sample %d/%d...\n", i+1, sampleSize)
+	return fs, nil
+}
 
-// 		// Capture frame
-// 		img := gocv.NewMat()
-// 		if ok := frs.camera.Read(&img); !ok {
-// 			img.Close()
-// 			return fmt.Errorf("cannot read from camera")
-// 		}
+// loadUsers loads existing users from storage
+func (fs *FacialSystem) loadUsers() error {
+	// Implementation would load serialized user data
+	// This is a placeholder - you'd implement actual persistence
+	return nil
+}
 
-// 		// Save frame temporarily
-// 		tempFile := fmt.Sprintf("temp_sample_%d.jpg", i)
-// 		if ok := gocv.IMWrite(tempFile, img); !ok {
-// 			img.Close()
-// 			return fmt.Errorf("failed to save image")
-// 		}
-// 		img.Close()
+// saveUsers saves users to storage
+func (fs *FacialSystem) saveUsers() error {
+	// Implementation would serialize and save user data
+	// This is a placeholder - you'd implement actual persistence
+	return nil
+}
 
-// 		// Recognize faces in the image
-// 		faces, err := frs.recognizer.RecognizeFile(tempFile)
-// 		os.Remove(tempFile) // Clean up temp file
+// ensureCameraInitialized makes sure the camera is initialized
+func (fs *FacialSystem) ensureCameraInitialized() error {
+	if fs.camera != nil {
+		return nil
+	}
 
-// 		if err != nil {
-// 			return fmt.Errorf("recognition error: %v", err)
-// 		}
+	cam, err := gocv.OpenVideoCapture(0)
+	if err != nil {
+		return fmt.Errorf("cannot open camera: %v", err)
+	}
+	fs.camera = cam
+	return nil
+}
 
-// 		if len(faces) == 0 {
-// 			fmt.Println("No face detected. Please make sure your face is visible.")
-// 			i-- // Retry this sample
-// 			time.Sleep(1 * time.Second)
-// 			continue
-// 		}
+// releaseCamera closes the camera if it's open
+func (fs *FacialSystem) releaseCamera() {
+	if fs.camera != nil {
+		fs.camera.Close()
+		fs.camera = nil
+	}
+}
 
-// 		if len(faces) > 1 {
-// 			fmt.Println("Multiple faces detected. Please ensure only one person is in view.")
-// 			i-- // Retry this sample
-// 			time.Sleep(1 * time.Second)
-// 			continue
-// 		}
+// Close releases all resources
+func (fs *FacialSystem) Close() {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-// 		// Add face descriptor to samples
-// 		samples = append(samples, faces[0].Descriptor)
-// 		time.Sleep(500 * time.Millisecond) // Small delay between captures
-// 	}
+	fs.releaseCamera()
+	if fs.recognizer != nil {
+		fs.recognizer.Close()
+		fs.recognizer = nil
+	}
+	fs.isInitialized = false
+}
 
-// 	if len(samples) == 0 {
-// 		return fmt.Errorf("couldn't capture any valid face samples")
-// 	}
+// TrainNewUser trains the model with a new user
+func (fs *FacialSystem) TrainNewUser(email string) (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-// 	frs.samples = samples
-// 	fmt.Println("Model successfully trained!")
-// 	return nil
-// }
+	if !fs.isInitialized {
+		return "", fmt.Errorf("facial system not initialized")
+	}
 
-// func (frs *FaceRecognitionSystem) CheckFace() bool {
-// 	// Capture frame
-// 	img := gocv.NewMat()
-// 	defer img.Close()
+	// Initialize camera if needed
+	if err := fs.ensureCameraInitialized(); err != nil {
+		return "", err
+	}
 
-// 	if ok := frs.camera.Read(&img); !ok {
-// 		fmt.Println("Cannot read from camera")
-// 		return false
-// 	}
+	// Check if user already exists
+	for _, user := range fs.users {
+		if user.Email == email {
+			return "", fmt.Errorf("user with email %s already exists", email)
+		}
+	}
 
-// 	// Save frame temporarily
-// 	tempFile := "temp_check.jpg"
-// 	if ok := gocv.IMWrite(tempFile, img); !ok {
-// 		fmt.Println("Failed to save image")
-// 		return false
-// 	}
+	// Generate a unique ID for the user
+	userID := fmt.Sprintf("user_%d", time.Now().UnixNano())
 
-// 	// Recognize faces in the image
-// 	faces, err := frs.recognizer.RecognizeFile(tempFile)
-// 	os.Remove(tempFile) // Clean up temp file
+	fmt.Println("Training model for new user. Please sit in front of the camera.")
+	time.Sleep(3 * time.Second) // Give time for user to prepare
 
-// 	if err != nil {
-// 		fmt.Printf("Recognition error: %v\n", err)
-// 		return false
-// 	}
+	var samples []face.Descriptor
 
-// 	if len(faces) == 0 {
-// 		return false // No face detected
-// 	}
+	// Capture multiple samples for better recognition
+	for i := 0; i < sampleSize; i++ {
+		fmt.Printf("Capturing sample %d/%d...\n", i+1, sampleSize)
 
-// 	// Check if the detected face matches the trained face
-// 	for _, sample := range frs.samples {
-// 		// Check similarity with each sample
-// 		for _, face := range faces {
-// 			// Calculate Euclidean distance between face descriptors
-// 			// Lower distance means more similarity
-// 			dist := euclideanDistance(sample, face.Descriptor)
-// 			if dist < recognitionThreshold {
-// 				return true // Face matches
-// 			}
-// 		}
-// 	}
+		// Capture frame
+		img := gocv.NewMat()
+		if ok := fs.camera.Read(&img); !ok {
+			img.Close()
+			return "", fmt.Errorf("cannot read from camera")
+		}
 
-// 	return false // No matching face
-// }
+		// Save frame temporarily
+		tempFile := fmt.Sprintf("temp_sample_%d.jpg", i)
+		if ok := gocv.IMWrite(tempFile, img); !ok {
+			img.Close()
+			return "", fmt.Errorf("failed to save image")
+		}
+		img.Close()
 
-// // Calculate Euclidean distance between two face descriptors
-// func euclideanDistance(a, b face.Descriptor) float32 {
-// 	var sum float32
-// 	for i := 0; i < len(a); i++ {
-// 		diff := a[i] - b[i]
-// 		sum += diff * diff
-// 	}
-// 	return sum
-// }
+		// Recognize faces in the image
+		faces, err := fs.recognizer.RecognizeFile(tempFile)
+		os.Remove(tempFile) // Clean up temp file
 
-// func (frs *FaceRecognitionSystem) StartMonitoring() {
-// 	ticker := time.NewTicker(checkInterval * time.Second)
-// 	defer ticker.Stop()
+		if err != nil {
+			return "", fmt.Errorf("recognition error: %v", err)
+		}
 
-// 	// Set up graceful shutdown
-// 	c := make(chan os.Signal, 1)
-// 	signal.Notify(c, os.Interrupt)
+		if len(faces) == 0 {
+			fmt.Println("No face detected. Please make sure your face is visible.")
+			i-- // Retry this sample
+			time.Sleep(1 * time.Second)
+			continue
+		}
 
-// 	fmt.Println("Monitoring started. Press Ctrl+C to stop.")
+		if len(faces) > 1 {
+			fmt.Println("Multiple faces detected. Please ensure only one person is in view.")
+			i-- // Retry this sample
+			time.Sleep(1 * time.Second)
+			continue
+		}
 
-// 	// Initial check
-// 	go frs.performCheck()
+		// Add face descriptor to samples
+		samples = append(samples, faces[0].Descriptor)
+		time.Sleep(500 * time.Millisecond) // Small delay between captures
+	}
 
-// 	for {
-// 		select {
-// 		case <-ticker.C:
-// 			go frs.performCheck()
-// 		case <-c:
-// 			fmt.Println("\nShutting down...")
-// 			return
-// 		}
-// 	}
-// }
+	if len(samples) == 0 {
+		return "", fmt.Errorf("couldn't capture any valid face samples")
+	}
 
-// func (frs *FaceRecognitionSystem) performCheck() {
-// 	authorized := frs.CheckFace()
+	// Create and store the new user
+	newUser := &User{
+		ID:       userID,
+		Email:    email,
+		Samples:  samples,
+		Created:  time.Now(),
+		Modified: time.Now(),
+	}
 
-// 	if !authorized {
-// 		if !frs.isLocked {
-// 			fmt.Println("Locking")
-// 			frs.isLocked = true
-// 		}
-// 	} else {
-// 		if frs.isLocked {
-// 			fmt.Println("All good")
-// 			frs.isLocked = false
-// 		} else {
-// 			fmt.Println("All good")
-// 		}
-// 	}
-// }
+	fs.users[userID] = newUser
 
-// func main() {
-// 	// Check if model directory exists
-// 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
-// 		fmt.Printf("Model directory '%s' does not exist. Please create it and download the required models.\n", modelDir)
-// 		return
-// 	}
+	// Save users to storage
+	if err := fs.saveUsers(); err != nil {
+		fmt.Printf("Warning: Could not save users: %v\n", err)
+	}
 
-// 	frs, err := NewFaceRecognitionSystem()
-// 	if err != nil {
-// 		fmt.Printf("Error initializing face recognition system: %v\n", err)
-// 		return
-// 	}
-// 	defer frs.Close()
+	// Release camera after training
+	fs.releaseCamera()
 
-// 	fmt.Println("Face Recognition System initialized.")
+	fmt.Println("User successfully registered!")
+	return userID, nil
+}
 
-// 	// Train the model with current user's face
-// 	if err := frs.TrainModel(); err != nil {
-// 		fmt.Printf("Training error: %v\n", err)
-// 		return
-// 	}
+// LoginUser tries to authenticate a user using facial recognition
+func (fs *FacialSystem) LoginUser() (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-// 	// Start periodic monitoring
-// 	frs.StartMonitoring()
-// }
+	if !fs.isInitialized {
+		return "", fmt.Errorf("facial system not initialized")
+	}
+
+	if len(fs.users) == 0 {
+		return "", fmt.Errorf("no users registered in the system")
+	}
+
+	// Initialize camera if needed
+	if err := fs.ensureCameraInitialized(); err != nil {
+		return "", err
+	}
+
+	// Capture frame
+	img := gocv.NewMat()
+	defer img.Close()
+
+	if ok := fs.camera.Read(&img); !ok {
+		return "", fmt.Errorf("cannot read from camera")
+	}
+
+	// Save frame temporarily
+	tempFile := "temp_login.jpg"
+	if ok := gocv.IMWrite(tempFile, img); !ok {
+		return "", fmt.Errorf("failed to save image")
+	}
+
+	// Recognize faces in the image
+	faces, err := fs.recognizer.RecognizeFile(tempFile)
+	os.Remove(tempFile) // Clean up temp file
+
+	if err != nil {
+		return "", fmt.Errorf("recognition error: %v", err)
+	}
+
+	if len(faces) == 0 {
+		return "", fmt.Errorf("no face detected")
+	}
+
+	if len(faces) > 1 {
+		return "", fmt.Errorf("multiple faces detected")
+	}
+
+	// Check the detected face against all registered users
+	detectedFace := faces[0].Descriptor
+	bestMatch := ""
+	bestDistance := float32(100.0) // Initialize with a large value
+
+	for userID, user := range fs.users {
+		for _, sample := range user.Samples {
+			dist := euclideanDistance(sample, detectedFace)
+			if dist < bestDistance {
+				bestDistance = dist
+				bestMatch = userID
+			}
+		}
+	}
+
+	// Release camera after login attempt
+	fs.releaseCamera()
+
+	if bestDistance < recognitionThreshold {
+		fs.currentUser = fs.users[bestMatch]
+		return fs.users[bestMatch].Email, nil
+	}
+
+	return "", fmt.Errorf("face not recognized")
+}
+
+// Calculate Euclidean distance between two face descriptors
+func euclideanDistance(a, b face.Descriptor) float32 {
+	var sum float32
+	for i := 0; i < len(a); i++ {
+		diff := a[i] - b[i]
+		sum += diff * diff
+	}
+	return sum
+}
+
+// GetCurrentUser returns the current logged-in user
+func (fs *FacialSystem) GetCurrentUser() (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	if fs.currentUser == nil {
+		return "", fmt.Errorf("no user is currently logged in")
+	}
+
+	return fs.currentUser.Email, nil
+}
+
+// Logout logs out the current user
+func (fs *FacialSystem) Logout() error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.currentUser = nil
+	return nil
+}
+
+// IsInitialized returns whether the system is initialized
+func (fs *FacialSystem) IsInitialized() bool {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return fs.isInitialized
+}
+
+// GetRegisteredUserCount returns the number of registered users
+func (fs *FacialSystem) GetRegisteredUserCount() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	return len(fs.users)
+}

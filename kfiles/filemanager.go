@@ -40,7 +40,7 @@ type FileType struct {
 
 // LaunchFileBrowser creates a new FileBrowser instance with the platform-specific path
 func LaunchFileBrowser() (*FileBrowser, error) {
-	platformPath, err := getPlatformSpecificPath()
+	platformPath, err := GetPlatformSpecificPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get platform-specific path: %w", err)
 	}
@@ -61,7 +61,7 @@ func LaunchFileBrowser() (*FileBrowser, error) {
 }
 
 // getPlatformSpecificPath returns the appropriate directory path based on the OS
-func getPlatformSpecificPath() (string, error) {
+func GetPlatformSpecificPath() (string, error) {
 	var basePath string
 	var err error
 

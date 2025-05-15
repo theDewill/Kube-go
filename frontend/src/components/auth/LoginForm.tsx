@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, Key, LockKeyhole, Mail } from "lucide-react";
+import { Camera, Key, LockKeyhole, Mail, UserPlus } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -14,19 +14,20 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
-export function LoginForm({ onLogin }: { onLogin: () => void }) {
+export function LoginForm({ onLogin, facialSystem }) {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
+    // Simulate login for credential-based login
     setTimeout(() => {
       setIsLoading(false);
       if (email && password) {
@@ -73,21 +74,49 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  const handleFacialLogin = () => {
+  const handleFacialLogin = async () => {
     setIsLoading(true);
 
-    // Simulate facial recognition
-    setTimeout(() => {
+    try {
+      // Call the Go method for facial login
+      const userEmail = await window.go.security.FacialSystem.LoginUser();
+
       setIsLoading(false);
-      toast.success("Facial recognition successful");
+      toast.success(`Welcome back, ${userEmail}`);
       stopCamera();
       onLogin();
-    }, 2000);
+    } catch (error) {
+      setIsLoading(false);
+      toast.error(`Authentication failed: ${error.message || "Face not recognized"}`);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!registerEmail) {
+      toast.error("Please enter an email address for registration");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Call the Go method for user registration with facial training
+      const userId = await window.go.security.FacialSystem.TrainNewUser(registerEmail);
+
+      setIsLoading(false);
+      toast.success("Registration successful! You can now login with facial recognition.");
+      stopCamera();
+      // Switch to facial login tab
+      document.querySelector('[value="facial"]').click();
+    } catch (error) {
+      setIsLoading(false);
+      toast.error(`Registration failed: ${error.message || "Could not register face"}`);
+    }
   };
 
   // Handle tab changes to start/stop camera
-  const handleTabChange = (value: string) => {
-    if (value === "facial") {
+  const handleTabChange = (value) => {
+    if (value === "facial" || value === "register") {
       startCamera();
     } else {
       stopCamera();
@@ -108,15 +137,19 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
         <CardDescription>On-premise storage solution</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="facial" onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="facial">
-              <Camera className="h-4 w-4 mr-2" />
-              Facial Recognition
-            </TabsTrigger>
+        <Tabs defaultValue="credentials" onValueChange={handleTabChange}>
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="credentials">
               <Key className="h-4 w-4 mr-2" />
               Credentials
+            </TabsTrigger>
+            <TabsTrigger value="facial">
+              <Camera className="h-4 w-4 mr-2" />
+              Facial Login
+            </TabsTrigger>
+            <TabsTrigger value="register">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Register Face
             </TabsTrigger>
           </TabsList>
 
@@ -157,7 +190,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
 
           <TabsContent value="facial">
             <div className="space-y-4 text-center">
-              <div className="w-32 h-32 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
+              <div className="w-36 h-36 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
                 {cameraActive ? (
                   <video
                     ref={videoRef}
@@ -177,19 +210,64 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
               </p>
               <Button
                 onClick={handleFacialLogin}
-                className="w-full bg-green-500 hover:bg-green-700"
+                className="w-full bg-green-500 hover:bg-green-600"
                 disabled={isLoading}
               >
-                {isLoading ? "Scanning..." : "Start Scan"}
+                {isLoading ? "Scanning..." : "Login with Face"}
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="register">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="registerEmail">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="registerEmail"
+                    type="email"
+                    placeholder="name@example.com"
+                    className="pl-10"
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="w-36 h-36 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
+                {cameraActive ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="min-w-full min-h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full w-full">
+                    <Camera className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                We'll take multiple samples of your face to train the recognition system
+              </p>
+              <Button
+                onClick={handleRegister}
+                className="w-full bg-blue-500 hover:bg-blue-600"
+                disabled={isLoading}
+              >
+                {isLoading ? "Registering..." : "Register Face"}
               </Button>
             </div>
           </TabsContent>
         </Tabs>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
-        {/* <div className="text-xs text-muted-foreground text-center">
-          This is a demo application. Any credentials will work.
-        </div> */}
+        <div className="text-xs text-muted-foreground text-center">
+          Your face data is processed locally and never leaves your device
+        </div>
       </CardFooter>
     </Card>
   );

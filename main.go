@@ -6,6 +6,7 @@ import (
 	"kube-go/kfiles"
 	knet "kube-go/kubenet"
 	RFG "kube-go/refrigirator"
+	security "kube-go/security"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -30,6 +31,14 @@ func main() {
 	}
 	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir)
 
+	facialSystem, fsErr := security.NewFacialSystem("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/users")
+	if fsErr != nil {
+		log.Printf("Warning: Failed to initialize facial recognition system: %v", fsErr)
+		// We don't fatal here because the app can still function without facial recognition
+	} else {
+		fmt.Println("Facial recognition system initialized successfully")
+	}
+
 	app := NewApp()
 	app.register = Registry
 	app.fileBrowser = fileBrowser
@@ -47,7 +56,14 @@ func main() {
 			Registry,
 			fileBrowser,
 			RFG,
+			facialSystem,
 		},
+		// OnShutdown: func(ctx) {
+
+		// 	if facialSystem != nil {
+		// 		facialSystem.Close()
+		// 	}
+		// },
 	})
 
 	if err != nil {
