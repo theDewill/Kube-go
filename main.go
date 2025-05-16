@@ -39,18 +39,25 @@ func main() {
 	// }
 	appDir := "/Users/nominsendinu/DEWILL/CODE/Projects/kube-go"
 
-	indexPath := filepath.Join(appDir, "index")
+	dbPath := filepath.Join(appDir, "db")
 	modelsPath := filepath.Join(appDir, "models")
 
-	facialSystem, fsErr := security.NewFacialSystem(indexPath, modelsPath)
+	facialSystem, fsErr := security.NewFacialSystem(dbPath, modelsPath)
 	if fsErr != nil {
 		log.Printf("Warning: Failed to initialize facial recognition system: %v", fsErr)
 		// We don't fatal here because the app can still function without facial recognition
 	} else {
 		fmt.Println("Facial recognition system initialized successfully")
 		fmt.Printf("Using models from: %s\n", modelsPath)
-		fmt.Printf("User data stored in: %s\n", indexPath)
-		fmt.Printf("Number of registered users: %d\n", facialSystem.GetRegisteredUserCount())
+		fmt.Printf("User data stored in SQLite database: %s\n", dbPath)
+
+		// Get the number of registered users
+		userCount, err := facialSystem.GetRegisteredUserCount()
+		if err != nil {
+			log.Printf("Warning: Failed to get registered user count: %v", err)
+		} else {
+			fmt.Printf("Number of registered users: %d\n", userCount)
+		}
 	}
 	app := NewApp()
 	app.register = Registry

@@ -1,17 +1,16 @@
 package security
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"kube-go/dbops"
+
 	"gocv.io/x/gocv"
-	"gocv.io/x/gocv/contrib"
 )
 
 const (
@@ -23,30 +22,18 @@ const (
 	minSimilarity = 0.7
 )
 
-// User represents a registered user in the system
-type User struct {
-	ID       string    `json:"id"`
-	Email    string    `json:"email"`
-	Features []float64 `json:"features"` // Face feature vector
-	Created  time.Time `json:"created"`
-	Modified time.Time `json:"modified"`
-}
-
 // FacialSystem is the main struct for the facial recognition system
 type FacialSystem struct {
-	faceDetector     gocv.Net
-	faceRecognizer   *contrib.LBPHFaceRecognizer
-	camera           *gocv.VideoCapture
-	users            map[string]*User
-	currentUser      *User
-	isInitialized    bool
-	usersStoragePath string
-	modelsPath       string
-	mu               sync.Mutex
+	faceDetector  gocv.Net
+	camera        *gocv.VideoCapture
+	currentUser   string
+	isInitialized bool
+	modelsPath    string
+	mu            sync.Mutex
 }
 
 // NewFacialSystem creates a new facial recognition system
-func NewFacialSystem(usersPath string, modelsPath string) (*FacialSystem, error) {
+func NewFacialSystem(dbPath string, modelsPath string) (*FacialSystem, error) {
 	// Check if models directory exists
 	if _, err := os.Stat(modelsPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("models directory '%s' does not exist", modelsPath)
@@ -64,92 +51,27 @@ func NewFacialSystem(usersPath string, modelsPath string) (*FacialSystem, error)
 		return nil, fmt.Errorf("face detection model not found at %s", faceModel)
 	}
 
+	// Initialize database
+	dbConfig := dbops.DBConfig{
+		Path: dbPath,
+	}
+	if err := dbops.Initialize(dbConfig); err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %v", err)
+	}
+
 	// Load the face detection model
 	faceNet := gocv.ReadNet(faceModel, faceProto)
 	if faceNet.Empty() {
 		return nil, fmt.Errorf("error reading face detection model")
 	}
 
-	// Create face recognizer
-	faceRecognizer := contrib.NewLBPHFaceRecognizer()
-
-	// Create users directory if it doesn't exist
-	if _, err := os.Stat(usersPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(usersPath, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create users directory: %v", err)
-		}
-	}
-
 	fs := &FacialSystem{
-		faceDetector:     faceNet,
-		faceRecognizer:   faceRecognizer,
-		users:            make(map[string]*User),
-		isInitialized:    true,
-		usersStoragePath: usersPath,
-		modelsPath:       modelsPath,
-	}
-
-	// Load existing users
-	if err := fs.loadUsers(); err != nil {
-		fmt.Printf("Warning: Could not load users: %v\n", err)
+		faceDetector:  faceNet,
+		isInitialized: true,
+		modelsPath:    modelsPath,
 	}
 
 	return fs, nil
-}
-
-// loadUsers loads existing users from storage
-func (fs *FacialSystem) loadUsers() error {
-	files, err := ioutil.ReadDir(fs.usersStoragePath)
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".json" {
-			data, err := ioutil.ReadFile(filepath.Join(fs.usersStoragePath, file.Name()))
-			if err != nil {
-				fmt.Printf("Warning: Could not read user file %s: %v\n", file.Name(), err)
-				continue
-			}
-
-			var user User
-			if err := json.Unmarshal(data, &user); err != nil {
-				fmt.Printf("Warning: Could not parse user file %s: %v\n", file.Name(), err)
-				continue
-			}
-
-			fs.users[user.ID] = &user
-		}
-	}
-
-	// Train the recognizer with loaded users
-	if len(fs.users) > 0 {
-		fs.trainRecognizerWithUsers()
-	}
-
-	return nil
-}
-
-// trainRecognizerWithUsers trains the face recognizer with all loaded users
-func (fs *FacialSystem) trainRecognizerWithUsers() {
-	// Collect training data
-	// var images []gocv.Mat
-	// var labels []int
-
-	// This is just a placeholder - you would need to convert the feature vectors
-	// back to images or use a different approach with OpenCV's face recognizer
-
-	// For now, we'll just load and use the stored feature vectors directly
-}
-
-// saveUser saves a user to storage
-func (fs *FacialSystem) saveUser(user *User) error {
-	data, err := json.Marshal(user)
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(filepath.Join(fs.usersStoragePath, user.ID+".json"), data, 0644)
 }
 
 // ensureCameraInitialized makes sure the camera is initialized
@@ -261,7 +183,7 @@ func (fs *FacialSystem) extractFeatures(faceImg gocv.Mat) ([]float64, error) {
 	defer equalized.Close()
 	gocv.EqualizeHist(resized, &equalized)
 
-	// Create a simple feature vector by subsampling pixel values
+	// Create a feature vector by subsampling pixel values
 	// This is a simplified approach - a proper face recognition system would use more sophisticated features
 	const sampleStep = 8
 	features := make([]float64, 0, (128/sampleStep)*(128/sampleStep))
@@ -283,8 +205,10 @@ func (fs *FacialSystem) Close() {
 
 	fs.releaseCamera()
 	fs.faceDetector.Close()
-	fs.faceRecognizer.Close()
 	fs.isInitialized = false
+
+	// Close database connection
+	dbops.Close()
 }
 
 // TrainNewUser trains the model with a new user
@@ -302,14 +226,22 @@ func (fs *FacialSystem) TrainNewUser(email string) (string, error) {
 	}
 
 	// Check if user already exists
-	for _, user := range fs.users {
-		if user.Email == email {
-			return "", fmt.Errorf("user with email %s already exists", email)
-		}
+	existingUser, err := dbops.GetUserByEmail(email)
+	if err != nil {
+		return "", err
 	}
 
-	// Generate a unique ID for the user
-	userID := fmt.Sprintf("user_%d", time.Now().UnixNano())
+	var userID string
+
+	if existingUser != nil {
+		userID = existingUser["id"].(string)
+	} else {
+		// Create new user
+		userID, err = dbops.CreateUser(email)
+		if err != nil {
+			return "", fmt.Errorf("failed to create user: %v", err)
+		}
+	}
 
 	fmt.Println("Training model for new user. Please sit in front of the camera.")
 	time.Sleep(3 * time.Second) // Give time for user to prepare
@@ -381,20 +313,10 @@ func (fs *FacialSystem) TrainNewUser(email string) (string, error) {
 		avgFeatures[i] /= float64(len(allFeatures))
 	}
 
-	// Create and store the new user
-	newUser := &User{
-		ID:       userID,
-		Email:    email,
-		Features: avgFeatures,
-		Created:  time.Now(),
-		Modified: time.Now(),
-	}
-
-	fs.users[userID] = newUser
-
-	// Save user to storage
-	if err := fs.saveUser(newUser); err != nil {
-		fmt.Printf("Warning: Could not save user: %v\n", err)
+	// Store features in database
+	_, err = dbops.StoreFaceFeatures(userID, avgFeatures)
+	if err != nil {
+		return "", fmt.Errorf("failed to store face features: %v", err)
 	}
 
 	// Release camera after training
@@ -404,30 +326,6 @@ func (fs *FacialSystem) TrainNewUser(email string) (string, error) {
 	return userID, nil
 }
 
-// compareFeatures compares two feature vectors and returns a similarity score
-func compareFeatures(features1, features2 []float64) float64 {
-	if len(features1) != len(features2) {
-		return 0
-	}
-
-	// Calculate cosine similarity
-	var dotProduct, magnitude1, magnitude2 float64
-
-	for i := 0; i < len(features1); i++ {
-		dotProduct += features1[i] * features2[i]
-		magnitude1 += features1[i] * features1[i]
-		magnitude2 += features2[i] * features2[i]
-	}
-
-	magnitude1 = float64(float64(magnitude1) * float64(magnitude2))
-
-	if magnitude1 == 0 {
-		return 0
-	}
-
-	return dotProduct / magnitude1
-}
-
 // LoginUser tries to authenticate a user using facial recognition
 func (fs *FacialSystem) LoginUser() (string, error) {
 	fs.mu.Lock()
@@ -435,10 +333,6 @@ func (fs *FacialSystem) LoginUser() (string, error) {
 
 	if !fs.isInitialized {
 		return "", fmt.Errorf("facial system not initialized")
-	}
-
-	if len(fs.users) == 0 {
-		return "", fmt.Errorf("no users registered in the system")
 	}
 
 	// Initialize camera if needed
@@ -472,28 +366,19 @@ func (fs *FacialSystem) LoginUser() (string, error) {
 		return "", fmt.Errorf("feature extraction error: %v", err)
 	}
 
-	// Compare with all registered users
-	var bestMatchUserID string
-	var bestSimilarity float64
-
-	for userID, user := range fs.users {
-		similarity := compareFeatures(features, user.Features)
-		if similarity > bestSimilarity {
-			bestSimilarity = similarity
-			bestMatchUserID = userID
-		}
+	// Find matching user
+	email, err := dbops.GetUserByFaceFeatures(features, minSimilarity)
+	if err != nil {
+		return "", err
 	}
+
+	// Store current user
+	fs.currentUser = email
 
 	// Release camera after login attempt
 	fs.releaseCamera()
 
-	// Check if the similarity exceeds the minimum threshold
-	if bestSimilarity >= minSimilarity {
-		fs.currentUser = fs.users[bestMatchUserID]
-		return fs.users[bestMatchUserID].Email, nil
-	}
-
-	return "", fmt.Errorf("face not recognized (best match: %.2f, required: %.2f)", bestSimilarity, minSimilarity)
+	return email, nil
 }
 
 // GetCurrentUser returns the current logged-in user
@@ -501,11 +386,11 @@ func (fs *FacialSystem) GetCurrentUser() (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	if fs.currentUser == nil {
+	if fs.currentUser == "" {
 		return "", fmt.Errorf("no user is currently logged in")
 	}
 
-	return fs.currentUser.Email, nil
+	return fs.currentUser, nil
 }
 
 // Logout logs out the current user
@@ -513,7 +398,7 @@ func (fs *FacialSystem) Logout() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	fs.currentUser = nil
+	fs.currentUser = ""
 	return nil
 }
 
@@ -526,9 +411,12 @@ func (fs *FacialSystem) IsInitialized() bool {
 }
 
 // GetRegisteredUserCount returns the number of registered users
-func (fs *FacialSystem) GetRegisteredUserCount() int {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
+func (fs *FacialSystem) GetRegisteredUserCount() (int, error) {
+	// Get all users from database
+	users, err := dbops.GetAllData("users", nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get users: %v", err)
+	}
 
-	return len(fs.users)
+	return len(users), nil
 }

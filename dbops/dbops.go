@@ -1,18 +1,12 @@
 package dbops
 
-
-package dbops
-
 import (
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // DB is the global database connection
