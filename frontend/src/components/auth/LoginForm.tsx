@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { LoginUser, TrainNewUser } from "@/../wailsjs/go/security/FacialSystem";
 
 export function LoginForm({ onLogin, facialSystem }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +80,7 @@ export function LoginForm({ onLogin, facialSystem }) {
 
     try {
       // Call the Go method for facial login
-      const userEmail = await window.go.security.FacialSystem.LoginUser();
+      const userEmail = await LoginUser();
 
       setIsLoading(false);
       toast.success(`Welcome back, ${userEmail}`);
@@ -101,7 +102,7 @@ export function LoginForm({ onLogin, facialSystem }) {
 
     try {
       // Call the Go method for user registration with facial training
-      const userId = await window.go.security.FacialSystem.TrainNewUser(registerEmail);
+      const userId = await TrainNewUser(registerEmail);
 
       setIsLoading(false);
       toast.success("Registration successful! You can now login with facial recognition.");

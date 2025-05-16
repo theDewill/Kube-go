@@ -8,6 +8,7 @@ import (
 	RFG "kube-go/refrigirator"
 	security "kube-go/security"
 	"log"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -31,14 +32,26 @@ func main() {
 	}
 	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir)
 
-	facialSystem, fsErr := security.NewFacialSystem("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/users")
+	// facial recognition system DIR
+	// appDir, apperr := kfiles.GetPlatformSpecificPath()
+	// if apperr != nil {
+	// 	log.Printf("Err getting platform specific path [kfile util]: %v", apperr)
+	// }
+	appDir := "/Users/nominsendinu/DEWILL/CODE/Projects/kube-go"
+
+	indexPath := filepath.Join(appDir, "index")
+	modelsPath := filepath.Join(appDir, "models")
+
+	facialSystem, fsErr := security.NewFacialSystem(indexPath, modelsPath)
 	if fsErr != nil {
 		log.Printf("Warning: Failed to initialize facial recognition system: %v", fsErr)
 		// We don't fatal here because the app can still function without facial recognition
 	} else {
 		fmt.Println("Facial recognition system initialized successfully")
+		fmt.Printf("Using models from: %s\n", modelsPath)
+		fmt.Printf("User data stored in: %s\n", indexPath)
+		fmt.Printf("Number of registered users: %d\n", facialSystem.GetRegisteredUserCount())
 	}
-
 	app := NewApp()
 	app.register = Registry
 	app.fileBrowser = fileBrowser
