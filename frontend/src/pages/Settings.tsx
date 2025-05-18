@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
 import {
   Settings as SettingsIcon,
   Save,
@@ -66,12 +67,12 @@ export default function Settings() {
     setHasUnsavedChanges(hasChanges);
   }, [settings, originalSettings]);
 
+  // Replace the loadSettings function:
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      // Try to download the settings.json file from the app directory
-      // We'll use a special path that the FileBrowser recognizes as the settings file
-      const blob = await FileBrowserAPI.downloadFile("../settings.json");
+      // Use the dedicated settings file method
+      const blob = await FileBrowserAPI.downloadSettingsFile();
       const text = await blob.text();
       const loadedSettings = JSON.parse(text);
 
@@ -89,18 +90,16 @@ export default function Settings() {
     }
   };
 
+  // Replace the saveSettings function:
   const saveSettings = async () => {
     setIsSaving(true);
     try {
       // Convert settings to JSON
       const jsonString = JSON.stringify(settings, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
+      const buffer = new TextEncoder().encode(jsonString);
 
-      // Create a File object from the blob
-      const file = new File([blob], "settings.json", { type: "application/json" });
-
-      // Upload the file to the app directory (use "../" to indicate parent directory)
-      await FileBrowserAPI.uploadFile("../", file, false, "simple");
+      // Use the dedicated settings file method to overwrite
+      await FileBrowserAPI.uploadSettingsFile(buffer);
 
       setOriginalSettings(settings);
       toast.success("Settings saved successfully");
@@ -216,243 +215,249 @@ export default function Settings() {
   }
 
   return (
-    <div className="flex flex-col h-full p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <SettingsIcon className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Application Settings</h1>
+    <AppLayout>
+      <div className="flex flex-col h-full p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <SettingsIcon className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Kube Settings</h1>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => checkConnections(settings)}
+              disabled={connectionStatus.checking}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${connectionStatus.checking ? "animate-spin" : ""}`}
+              />
+              Test Connections
+            </Button>
+            {hasUnsavedChanges && (
+              <Badge variant="outline" className="text-orange-600">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Unsaved Changes
+              </Badge>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => checkConnections(settings)}
-            disabled={connectionStatus.checking}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${connectionStatus.checking ? "animate-spin" : ""}`}
-            />
-            Test Connections
-          </Button>
-          {hasUnsavedChanges && (
-            <Badge variant="outline" className="text-orange-600">
-              <AlertCircle className="h-3 w-3 mr-1" />
-              Unsaved Changes
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      {hasUnsavedChanges && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>You have unsaved changes to your settings.</span>
-            <div className="flex space-x-2">
-              <Button size="sm" onClick={saveSettings} disabled={isSaving}>
-                {isSaving ? (
-                  <>
-                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-3 w-3 mr-1" />
-                    Save
-                  </>
-                )}
-              </Button>
-              <Button size="sm" variant="outline" onClick={resetSettings}>
-                Reset
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
-        {/* Ollama Settings */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center space-x-2">
-                <Zap className="h-5 w-5 text-blue-500" />
-                <span>Ollama Settings</span>
-              </CardTitle>
-              {getConnectionStatusBadge(
-                connectionStatus.ollama,
-                connectionStatus.checking,
-                "Ollama",
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="ollama-url">Ollama Server URL</Label>
-              <Input
-                id="ollama-url"
-                value={settings.ollama_url}
-                onChange={(e) => handleInputChange("ollama_url", e.target.value)}
-                placeholder="http://localhost:11434"
-              />
-              <p className="text-sm text-muted-foreground">
-                The URL where your Ollama server is running. Default is localhost:11434.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ollama-model">Ollama Model</Label>
-              <Input
-                id="ollama-model"
-                value={settings.ollama_model}
-                onChange={(e) => handleInputChange("ollama_model", e.target.value)}
-                placeholder="phi3:mini"
-              />
-              <p className="text-sm text-muted-foreground">
-                The Ollama model to use for content analysis. Popular options: phi3:mini,
-                llama3.1:8b
-              </p>
-            </div>
-
-            <div className="pt-4 border-t">
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <Info className="h-4 w-4" />
-                <span>Local AI processing for maximum privacy and offline capability.</span>
-              </div>
-              <Button
-                variant="link"
-                size="sm"
-                className="p-0 h-auto"
-                onClick={() => window.open("https://ollama.ai/download", "_blank")}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Download Ollama
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Gemini Settings */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center space-x-2">
-                <Globe className="h-5 w-5 text-green-500" />
-                <span>Google Gemini Settings</span>
-              </CardTitle>
-              {getConnectionStatusBadge(
-                connectionStatus.gemini,
-                connectionStatus.checking,
-                "Gemini",
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="gemini-key">Gemini API Key</Label>
-              <div className="relative">
-                <Input
-                  id="gemini-key"
-                  type={showApiKey ? "text" : "password"}
-                  value={settings.gemini_api_key}
-                  onChange={(e) => handleInputChange("gemini_api_key", e.target.value)}
-                  placeholder="Enter your Gemini API key"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {/* Action Buttons */}
+        {hasUnsavedChanges && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>You have unsaved changes to your settings.</span>
+              <div className="flex space-x-2">
+                <Button size="sm" onClick={saveSettings} disabled={isSaving}>
+                  {isSaving ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </>
+                  )}
+                </Button>
+                <Button size="sm" variant="outline" onClick={resetSettings}>
+                  Reset
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Your Google Gemini API key for cloud-based AI analysis.
-              </p>
-            </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
-            <div className="pt-4 border-t">
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <Info className="h-4 w-4" />
-                <span>Advanced cloud AI with superior content understanding.</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+          {/* Ollama Settings */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2">
+                  <Zap className="h-5 w-5 text-blue-500" />
+                  <span>Ollama Settings</span>
+                </CardTitle>
+                {getConnectionStatusBadge(
+                  connectionStatus.ollama,
+                  connectionStatus.checking,
+                  "Ollama",
+                )}
               </div>
-              <Button
-                variant="link"
-                size="sm"
-                className="p-0 h-auto"
-                onClick={() => window.open("https://aistudio.google.com/app/apikey", "_blank")}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Get Gemini API Key
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="ollama-url">Ollama Server URL</Label>
+                <Input
+                  id="ollama-url"
+                  value={settings.ollama_url}
+                  onChange={(e) => handleInputChange("ollama_url", e.target.value)}
+                  placeholder="http://localhost:11434"
+                />
+                <p className="text-sm text-muted-foreground">
+                  The URL where your Ollama server is running. Default is localhost:11434.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ollama-model">Ollama Model</Label>
+                <Input
+                  id="ollama-model"
+                  value={settings.ollama_model}
+                  onChange={(e) => handleInputChange("ollama_model", e.target.value)}
+                  placeholder="phi3:mini"
+                />
+                <p className="text-sm text-muted-foreground">
+                  The Ollama model to use for content analysis. Popular options: phi3:mini,
+                  llama3.1:8b
+                </p>
+              </div>
+
+              <div className="pt-4 border-t">
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                  <Info className="h-4 w-4" />
+                  <span>Local AI processing for maximum privacy and offline capability.</span>
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 h-auto"
+                  onClick={() => window.open("https://ollama.ai/download", "_blank")}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Download Ollama
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Gemini Settings */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2">
+                  <Globe className="h-5 w-5 text-green-500" />
+                  <span>Google Gemini Settings</span>
+                </CardTitle>
+                {getConnectionStatusBadge(
+                  connectionStatus.gemini,
+                  connectionStatus.checking,
+                  "Gemini",
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="gemini-key">Gemini API Key</Label>
+                <div className="relative">
+                  <Input
+                    id="gemini-key"
+                    type={showApiKey ? "text" : "password"}
+                    value={settings.gemini_api_key}
+                    onChange={(e) => handleInputChange("gemini_api_key", e.target.value)}
+                    placeholder="Enter your Gemini API key"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your Google Gemini API key for cloud-based AI analysis.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t">
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                  <Info className="h-4 w-4" />
+                  <span>Advanced cloud AI with superior content understanding.</span>
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 h-auto"
+                  onClick={() => window.open("https://aistudio.google.com/app/apikey", "_blank")}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Get Gemini API Key
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Information Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                <h3 className="font-medium">Privacy</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Ollama processes files locally on your machine, ensuring complete data privacy.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Zap className="h-5 w-5 text-blue-500" />
+                <h3 className="font-medium">Performance</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Both AI providers offer different performance characteristics. Test to find your
+                preference.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Globe className="h-5 w-5 text-green-500" />
+                <h3 className="font-medium">Quality</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Gemini typically provides more sophisticated content analysis and understanding.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Save Button (Fixed at bottom) */}
+        <div className="flex justify-end space-x-2 pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={resetSettings}
+            disabled={!hasUnsavedChanges || isSaving}
+          >
+            Reset
+          </Button>
+          <Button onClick={saveSettings} disabled={!hasUnsavedChanges || isSaving}>
+            {isSaving ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Settings
+              </>
+            )}
+          </Button>
+        </div>
       </div>
-
-      {/* Information Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <h3 className="font-medium">Privacy</h3>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Ollama processes files locally on your machine, ensuring complete data privacy.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Zap className="h-5 w-5 text-blue-500" />
-              <h3 className="font-medium">Performance</h3>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Both AI providers offer different performance characteristics. Test to find your
-              preference.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Globe className="h-5 w-5 text-green-500" />
-              <h3 className="font-medium">Quality</h3>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Gemini typically provides more sophisticated content analysis and understanding.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Save Button (Fixed at bottom) */}
-      <div className="flex justify-end space-x-2 pt-4 border-t">
-        <Button variant="outline" onClick={resetSettings} disabled={!hasUnsavedChanges || isSaving}>
-          Reset
-        </Button>
-        <Button onClick={saveSettings} disabled={!hasUnsavedChanges || isSaving}>
-          {isSaving ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
+    </AppLayout>
   );
 }

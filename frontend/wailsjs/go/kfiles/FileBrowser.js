@@ -50,6 +50,10 @@ export function MoveItem(arg1, arg2) {
   return window['go']['kfiles']['FileBrowser']['MoveItem'](arg1, arg2);
 }
 
+export function ReadSettingsFile() {
+  return window['go']['kfiles']['FileBrowser']['ReadSettingsFile']();
+}
+
 export function RefrigerateFile(arg1) {
   return window['go']['kfiles']['FileBrowser']['RefrigerateFile'](arg1);
 }
@@ -72,4 +76,8 @@ export function UploadFile(arg1, arg2, arg3, arg4) {
 
 export function UploadFileWithModel(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['kfiles']['FileBrowser']['UploadFileWithModel'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function WriteSettingsFile(arg1) {
+  return window['go']['kfiles']['FileBrowser']['WriteSettingsFile'](arg1);
 }

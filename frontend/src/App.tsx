@@ -8,7 +8,7 @@ import Nodes from "./pages/Nodes";
 import Refrigerated from "./pages/Refrigerated";
 import NotFound from "./pages/NotFound";
 import Finder from "./pages/Finder";
-
+import Settings from "./pages/Settings";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -22,6 +22,7 @@ const App = () => (
           <Route path="/nodes" element={<Nodes />} />
           <Route path="/refrigerated" element={<Refrigerated />} />
           <Route path="/finder" element={<Finder />} />
+          <Route path="/settings" element={<Settings />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

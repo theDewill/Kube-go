@@ -9,6 +9,8 @@ import {
   DownloadFile,
   UploadFileWithModel,
   SearchFiles,
+  ReadSettingsFile,
+  WriteSettingsFile,
 } from "@/../wailsjs/go/kfiles/FileBrowser";
 import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 
@@ -145,6 +147,28 @@ export class FileBrowserAPI {
       return await SearchFiles(query, limit);
     } catch (error) {
       console.error("Error searching files:", error);
+      throw error;
+    }
+  }
+
+  // SMart Finder
+  static async downloadSettingsFile(): Promise<Blob> {
+    try {
+      const data = await ReadSettingsFile();
+      return new Blob([data], { type: "application/json" });
+    } catch (error) {
+      console.error("Error downloading settings file:", error);
+      throw error;
+    }
+  }
+
+  static async uploadSettingsFile(data: ArrayBuffer): Promise<void> {
+    try {
+      const bytes = new Uint8Array(data);
+      const byteArray = Array.from(bytes);
+      await WriteSettingsFile(byteArray);
+    } catch (error) {
+      console.error("Error uploading settings file:", error);
       throw error;
     }
   }

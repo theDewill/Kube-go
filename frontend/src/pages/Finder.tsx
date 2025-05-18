@@ -40,6 +40,7 @@ import { Label } from "@/components/ui/label";
 import { FileBrowserAPI, SearchResult } from "@/lib/file-api";
 import { fileIconMap } from "@/lib/file-icons";
 import { File as FileType } from "@/types/file-types";
+import { toast } from "sonner";
 
 interface FinderProps {
   onFileSelect?: (file: FileType) => void;
@@ -94,7 +95,7 @@ export default function Finder({ onFileSelect }: FinderProps) {
 
       // Perform search
       const searchResults = await FileBrowserAPI.searchFiles(query, 20);
-      setResults(searchResults);
+      setResults(searchResults || []);
 
       const endTime = Date.now();
       setSearchTime(endTime - startTime);
@@ -213,7 +214,7 @@ export default function Finder({ onFileSelect }: FinderProps) {
     );
   };
 
-  const sortedResults = sortResults(results);
+  const sortedResults = sortResults(results || []);
 
   return (
     <AppLayout>

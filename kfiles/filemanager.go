@@ -515,9 +515,8 @@ func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string
 	return nil
 }
 
-// ReadSettingsFile reads the settings.json file from the app directory
+// Update the ReadSettingsFile method:
 func (fb *FileBrowser) ReadSettingsFile() ([]byte, error) {
-	// Get the platform-specific path (parent of kubeloads)
 	settingsPath := filepath.Join(fb.PlatformPath, "settings.json")
 
 	// Check if file exists
@@ -537,7 +536,7 @@ func (fb *FileBrowser) ReadSettingsFile() ([]byte, error) {
 	return data, nil
 }
 
-// WriteSettingsFile writes data to the settings.json file in the app directory
+// Update the WriteSettingsFile method to ensure it overwrites:
 func (fb *FileBrowser) WriteSettingsFile(data []byte) error {
 	settingsPath := filepath.Join(fb.PlatformPath, "settings.json")
 
@@ -547,11 +546,12 @@ func (fb *FileBrowser) WriteSettingsFile(data []byte) error {
 		return fmt.Errorf("invalid JSON data: %w", err)
 	}
 
-	// Write the file
+	// Write the file (this will overwrite existing file)
 	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write settings file: %w", err)
 	}
 
+	log.Printf("Settings file updated at: %s", settingsPath)
 	return nil
 }
 

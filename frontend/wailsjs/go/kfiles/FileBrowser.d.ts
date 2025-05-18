@@ -26,6 +26,8 @@ export function ListDirectory(arg1:string):Promise<Array<kfiles.FileType>>;
 
 export function MoveItem(arg1:string,arg2:string):Promise<void>;
 
+export function ReadSettingsFile():Promise<Array<number>>;
+
 export function RefrigerateFile(arg1:string):Promise<void>;
 
 export function RenameItem(arg1:string,arg2:string):Promise<void>;
@@ -37,3 +39,5 @@ export function UnrefrigerateFile(arg1:string):Promise<void>;
 export function UploadFile(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean):Promise<void>;
 
 export function UploadFileWithModel(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean,arg5:string):Promise<void>;
+
+export function WriteSettingsFile(arg1:Array<number>):Promise<void>;
