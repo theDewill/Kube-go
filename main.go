@@ -20,6 +20,11 @@ var assets embed.FS
 
 func main() {
 
+	//FILE PATHS
+	platformPath, err := kfiles.GetPlatformSpecificPath()
+	dbPath := filepath.Join(platformPath, "fileidx.sqlite")
+	modelsPath := filepath.Join(platformPath, "models")
+
 	Registry, NRegErr := knet.NewNodeRegistry("/Users/nominsendinu/DEWILL/CODE/Projects/kube-go/kfiles")
 	if NRegErr != nil {
 		println("Error:", NRegErr.Error())
@@ -31,10 +36,6 @@ func main() {
 		log.Fatalf("Error initializing File Browser: %v", fbErr)
 	}
 	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir, fileBrowser.KubeRestsDir)
-
-	appDir := "/Users/nominsendinu/DEWILL/CODE/Projects/kube-go"
-	dbPath := filepath.Join(appDir, "db/fileidx.sqlite") //<-TOENV
-	modelsPath := filepath.Join(appDir, "models")
 
 	facialSystem, fsErr := security.NewFacialSystem(dbPath, modelsPath)
 	if fsErr != nil {
