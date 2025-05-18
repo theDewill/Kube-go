@@ -26,11 +26,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -40,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 export function FileUpload({ onUpload, isUploading }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [distribute, setDistribute] = useState(false);
+  const [modelType, setModelType] = useState("ollama");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   const handleFileChange = (e) => {
@@ -55,10 +57,11 @@ export function FileUpload({ onUpload, isUploading }) {
     }
 
     try {
-      await onUpload(selectedFile, distribute);
+      await onUpload(selectedFile, distribute, modelType);
       setSelectedFile(null);
       setUploadDialogOpen(false);
       setDistribute(false);
+      setModelType("ollama");
     } catch (error) {
       toast.error(`Upload failed: ${error.message}`);
     }
@@ -72,7 +75,7 @@ export function FileUpload({ onUpload, isUploading }) {
           Upload File
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Upload File</DialogTitle>
           <DialogDescription>Choose a file to upload to the current directory.</DialogDescription>
@@ -82,6 +85,42 @@ export function FileUpload({ onUpload, isUploading }) {
             <Label htmlFor="file">File</Label>
             <Input id="file" type="file" onChange={handleFileChange} disabled={isUploading} />
           </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="model-type">AI Model for Content Analysis</Label>
+            <Select value={modelType} onValueChange={setModelType} disabled={isUploading}>
+              <SelectTrigger id="model-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ollama">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span>Ollama (Local)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="gemini">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span>Google Gemini (Cloud)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="simple">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                    <span>Simple Analysis (No AI)</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground">
+              {modelType === "ollama" && "Uses your local Ollama installation for content analysis"}
+              {modelType === "gemini" &&
+                "Uses Google Gemini API for advanced content analysis (requires API key)"}
+              {modelType === "simple" && "Basic keyword extraction without AI (fastest option)"}
+            </div>
+          </div>
+
           <div className="flex items-center space-x-2">
             <Switch
               id="distribute"
@@ -217,10 +256,10 @@ export function FileBrowser() {
     toast.info("Advanced filters coming soon");
   };
 
-  const handleUpload = async (file: File, distribute: boolean) => {
+  const handleUpload = async (file: File, distribute: boolean, modelType: string) => {
     setIsUploading(true);
     try {
-      await FileBrowserAPI.uploadFile(currentPath, file, distribute);
+      await FileBrowserAPI.uploadFile(currentPath, file, distribute, modelType);
       toast.success(`${file.name} ${distribute ? "distributed" : "uploaded"} successfully`);
       await loadDirectoryContents();
     } catch (err) {

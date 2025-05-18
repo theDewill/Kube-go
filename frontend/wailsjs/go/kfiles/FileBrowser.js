@@ -22,6 +22,14 @@ export function DownloadFile(arg1) {
   return window['go']['kfiles']['FileBrowser']['DownloadFile'](arg1);
 }
 
+export function GenerateFileDescription(arg1, arg2, arg3, arg4) {
+  return window['go']['kfiles']['FileBrowser']['GenerateFileDescription'](arg1, arg2, arg3, arg4);
+}
+
+export function GenerateFileDescriptionWithModel(arg1, arg2, arg3, arg4) {
+  return window['go']['kfiles']['FileBrowser']['GenerateFileDescriptionWithModel'](arg1, arg2, arg3, arg4);
+}
+
 export function GetCurrentPath(arg1) {
   return window['go']['kfiles']['FileBrowser']['GetCurrentPath'](arg1);
 }
@@ -50,10 +58,18 @@ export function RenameItem(arg1, arg2) {
   return window['go']['kfiles']['FileBrowser']['RenameItem'](arg1, arg2);
 }
 
+export function SearchFiles(arg1, arg2) {
+  return window['go']['kfiles']['FileBrowser']['SearchFiles'](arg1, arg2);
+}
+
 export function UnrefrigerateFile(arg1) {
   return window['go']['kfiles']['FileBrowser']['UnrefrigerateFile'](arg1);
 }
 
 export function UploadFile(arg1, arg2, arg3, arg4) {
   return window['go']['kfiles']['FileBrowser']['UploadFile'](arg1, arg2, arg3, arg4);
+}
+
+export function UploadFileWithModel(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['kfiles']['FileBrowser']['UploadFileWithModel'](arg1, arg2, arg3, arg4, arg5);
 }

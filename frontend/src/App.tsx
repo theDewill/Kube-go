@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Nodes from "./pages/Nodes";
 import Refrigerated from "./pages/Refrigerated";
 import NotFound from "./pages/NotFound";
+import Finder from "./pages/Finder";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/nodes" element={<Nodes />} />
           <Route path="/refrigerated" element={<Refrigerated />} />
+          <Route path="/finder" element={<Finder />} />
+
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

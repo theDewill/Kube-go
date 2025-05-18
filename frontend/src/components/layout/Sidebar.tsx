@@ -17,6 +17,7 @@ import {
   Users,
   PieChart,
   Snowflake,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
@@ -47,6 +48,10 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
       navigate("/nodes");
     } else if (path === "Refrigerated") {
       navigate("/refrigerated");
+    } else if (path === "Finder") {
+      navigate("/finder");
+    } else if (path === "Settings") {
+      navigate("/settings");
     } else {
       toast.info(`Navigating to ${path} (coming soon)`);
     }
@@ -56,6 +61,8 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
     if (path === "Home" && location.pathname === "/") return true;
     if (path === "Nodes" && location.pathname === "/nodes") return true;
     if (path === "Refrigerated" && location.pathname === "/refrigerated") return true;
+    if (path === "finder" && location.pathname === "/finder") return true;
+    if (path === "Settings" && location.pathname === "/settings") return true;
     return false;
   };
 
@@ -98,6 +105,13 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             isActive={isActive("My Files")}
             onClick={() => handleNavigation("My Files")}
           /> */}
+          <SidebarItem
+            icon={Brain}
+            label="Smart Finder"
+            isOpen={isOpen}
+            isActive={isActive("finder")}
+            onClick={() => handleNavigation("Finder")}
+          />
           <SidebarItem
             icon={Snowflake}
             label="Refrigerated"

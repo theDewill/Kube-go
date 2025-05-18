@@ -7,6 +7,8 @@ import {
   DeleteItem,
   UploadFile,
   DownloadFile,
+  UploadFileWithModel,
+  SearchFiles,
 } from "@/../wailsjs/go/kfiles/FileBrowser";
 import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 
@@ -14,6 +16,13 @@ import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 export interface DirectoryContents {
   files: FileType[];
   folders: Folder[];
+}
+
+export interface SearchResult {
+  file: FileType;
+  score: number;
+  matchType: string;
+  excerpt: string;
 }
 
 // Wrapper for calling the FileBrowser Go backend
@@ -100,15 +109,42 @@ export class FileBrowserAPI {
   }
 
   // Upload a file
-  static async uploadFile(path: string, file: File, distribute: boolean = false): Promise<void> {
+  // static async uploadFile(path: string, file: File, distribute: boolean = false): Promise<void> {
+  //   try {
+  //     const buffer = await file.arrayBuffer();
+  //     const bytes = new Uint8Array(buffer);
+  //     // Convert Uint8Array to regular array for Wails compatibility
+  //     const byteArray = Array.from(bytes);
+  //     await UploadFile(path, file.name, byteArray, distribute);
+  //   } catch (error) {
+  //     console.error("Error uploading file:", error);
+  //     throw error;
+  //   }
+  // }
+  //
+  static async uploadFile(
+    path: string,
+    file: File,
+    distribute: boolean = false,
+    modelType: string = "ollama",
+  ): Promise<void> {
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
       // Convert Uint8Array to regular array for Wails compatibility
       const byteArray = Array.from(bytes);
-      await UploadFile(path, file.name, byteArray, distribute);
+      await UploadFileWithModel(path, file.name, byteArray, distribute, modelType);
     } catch (error) {
       console.error("Error uploading file:", error);
+      throw error;
+    }
+  }
+
+  static async searchFiles(query: string, limit: number = 20): Promise<SearchResult[]> {
+    try {
+      return await SearchFiles(query, limit);
+    } catch (error) {
+      console.error("Error searching files:", error);
       throw error;
     }
   }

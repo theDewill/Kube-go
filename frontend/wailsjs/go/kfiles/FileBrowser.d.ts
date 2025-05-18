@@ -12,6 +12,10 @@ export function DeleteItem(arg1:string):Promise<void>;
 
 export function DownloadFile(arg1:string):Promise<Array<number>>;
 
+export function GenerateFileDescription(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function GenerateFileDescriptionWithModel(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function GetCurrentPath(arg1:string):Promise<string>;
 
 export function GetFileInfo(arg1:string):Promise<kfiles.FileType>;
@@ -26,6 +30,10 @@ export function RefrigerateFile(arg1:string):Promise<void>;
 
 export function RenameItem(arg1:string,arg2:string):Promise<void>;
 
+export function SearchFiles(arg1:string,arg2:number):Promise<Array<kfiles.SearchResult>>;
+
 export function UnrefrigerateFile(arg1:string):Promise<void>;
 
 export function UploadFile(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean):Promise<void>;
+
+export function UploadFileWithModel(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean,arg5:string):Promise<void>;

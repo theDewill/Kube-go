@@ -3,6 +3,7 @@ package kfiles
 import (
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -118,11 +119,60 @@ func (fb *FileBrowser) CheckStorageQuota(newFileSize int64) (bool, error) {
 	return newTotal <= storageInfo.TotalCapacity, nil
 }
 
+// InitializeSettings creates a default settings.json file in the app's home directory
+func InitializeSettings() error {
+	// Get the platform-specific app directory
+	homeDir, err := GetPlatformSpecificPath()
+	if err != nil {
+		return fmt.Errorf("failed to get app directory: %w", err)
+	}
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(homeDir, 0755); err != nil {
+		return fmt.Errorf("failed to create app directory: %w", err)
+	}
+
+	jsonPath := filepath.Join(homeDir, "settings.json")
+
+	// Check if settings.json already exists
+	if _, err := os.Stat(jsonPath); err == nil {
+		log.Printf("Settings file already exists at: %s", jsonPath)
+		return nil // File already exists, no need to create
+	}
+
+	// Create default settings
+	defaultSettings := AppSettings{
+		GeminiAPIKey: "", // Empty - user needs to fill this
+		OllamaURL:    "http://localhost:11434",
+		OllamaModel:  "phi3:mini",
+	}
+
+	// Marshal to JSON with indentation for readability
+	jsonData, err := json.MarshalIndent(defaultSettings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings to JSON: %w", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(jsonPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write settings file: %w", err)
+	}
+
+	log.Printf("Default settings file created at: %s", jsonPath)
+	log.Printf("Please edit the file to add your Gemini API key and customize other settings")
+
+	return nil
+}
+
 // LaunchFileBrowser creates a new FileBrowser instance with the platform-specific path
 func LaunchFileBrowser(nodeRegistry *kubenet.NodeRegistry) (*FileBrowser, error) {
 	platformPath, err := GetPlatformSpecificPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get platform-specific path: %w", err)
+	}
+
+	if err := InitializeSettings(); err != nil {
+		log.Printf("Warning: Failed to initialize settings: %v", err)
 	}
 
 	// Create the kubeloads directory
@@ -251,7 +301,113 @@ func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 }
 
 // UploadFile saves an uploaded file and optionally distributes it across nodes
+// func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileData []byte, distribute bool) error {
+// 	if !isValidName(fileName) {
+// 		return errors.New("invalid file name")
+// 	}
+
+// 	// Create a unique file ID
+// 	fileID := uuid.New().String()
+
+// 	// Calculate file hash for additional integrity verification
+// 	hasher := sha256.New()
+// 	hasher.Write(fileData)
+// 	//fileHash := hex.EncodeToString(hasher.Sum(nil))
+
+// 	// Create the target path in kubeloads
+// 	relativePath := strings.TrimPrefix(directoryPath, "/")
+// 	targetDir := filepath.Join(fb.KubeLoadsDir, relativePath)
+
+// 	// Ensure the directory exists
+// 	if err := os.MkdirAll(targetDir, 0755); err != nil {
+// 		return fmt.Errorf("failed to create directory: %w", err)
+// 	}
+
+// 	// Use the fileID as filename to avoid collisions and for security
+// 	storageFileName := fmt.Sprintf("%s-%s", fileID, fileName)
+// 	targetPath := filepath.Join(targetDir, storageFileName)
+
+// 	// Store file in database
+// 	db, err := sql.Open("sqlite3", fb.DbPath)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to open database: %w", err)
+// 	}
+// 	defer db.Close()
+
+// 	// Begin transaction
+// 	tx, err := db.Begin()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to begin transaction: %w", err)
+// 	}
+// 	defer tx.Rollback() // Will be committed on success
+
+// 	print("INSERTING TO DB")
+// 	// Insert file record
+// 	now := time.Now()
+// 	_, err = tx.Exec(
+// 		"INSERT INTO files (file_id, file_name, file_path, file_size, created_at, updated_at, is_distributed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+// 		fileID, fileName, filepath.Join(relativePath, storageFileName), len(fileData), now, now, distribute,
+// 	)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert file record: %w", err)
+// 	}
+
+// 	// Write the file to disk
+// 	if err := ioutil.WriteFile(targetPath, fileData, 0644); err != nil {
+// 		return fmt.Errorf("failed to write file: %w", err)
+// 	}
+
+// 	// If distribution is requested, chunk and distribute the file
+// 	if distribute {
+// 		// Count expected chunks
+// 		chunkSize := 1024 * 1024 // 1MB per chunk
+// 		totalChunks := (len(fileData) + chunkSize - 1) / chunkSize
+
+// 		// Update total_chunks in the database
+// 		_, err = tx.Exec(
+// 			"UPDATE files SET total_chunks = ? WHERE file_id = ?",
+// 			totalChunks, fileID,
+// 		)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to update total chunks: %w", err)
+// 		}
+
+// 		// Commit the transaction before distributing chunks
+// 		if err := tx.Commit(); err != nil {
+// 			return fmt.Errorf("failed to commit transaction: %w", err)
+// 		}
+
+// 		// Distribute file chunks
+// 		if err := fb.NodeRegistry.DistributeFileChunks(
+// 			fileID,
+// 			targetPath,
+// 			fileName,
+// 			fb.KubeRestsDir,
+// 			fb.DbPath,
+// 		); err != nil {
+// 			// File is already saved, so don't fail completely
+// 			log.Printf("Warning: Failed to distribute file %s: %v", fileID, err)
+// 			return nil
+// 		}
+
+// 		log.Printf("File %s successfully distributed across nodes", fileID)
+// 	} else {
+// 		// Commit the transaction
+// 		if err := tx.Commit(); err != nil {
+// 			return fmt.Errorf("failed to commit transaction: %w", err)
+// 		}
+// 	}
+
+//		return nil
+//	}
+//
+// UploadFile saves an uploaded file and optionally distributes it across nodes
 func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileData []byte, distribute bool) error {
+	return fb.UploadFileWithModel(directoryPath, fileName, fileData, distribute, "ollama")
+}
+
+// UploadFileWithModel saves an uploaded file with specified LLM model for description generation
+func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string, fileData []byte, distribute bool, modelType string) error {
 	if !isValidName(fileName) {
 		return errors.New("invalid file name")
 	}
@@ -291,7 +447,6 @@ func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileDat
 	}
 	defer tx.Rollback() // Will be committed on success
 
-	print("INSERTING TO DB")
 	// Insert file record
 	now := time.Now()
 	_, err = tx.Exec(
@@ -306,6 +461,15 @@ func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileDat
 	if err := ioutil.WriteFile(targetPath, fileData, 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
+
+	// Generate file description asynchronously with specified model
+	go func() {
+		if err := fb.GenerateFileDescription(fileID, targetPath, fileName, modelType); err != nil {
+			log.Printf("Warning: Failed to generate description for file %s using %s: %v", fileID, modelType, err)
+		} else {
+			log.Printf("Successfully generated description for file %s using %s", fileID, modelType)
+		}
+	}()
 
 	// If distribution is requested, chunk and distribute the file
 	if distribute {
@@ -346,6 +510,46 @@ func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileDat
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("failed to commit transaction: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// ReadSettingsFile reads the settings.json file from the app directory
+func (fb *FileBrowser) ReadSettingsFile() ([]byte, error) {
+	// Get the platform-specific path (parent of kubeloads)
+	settingsPath := filepath.Join(fb.PlatformPath, "settings.json")
+
+	// Check if file exists
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		// If settings file doesn't exist, create it with defaults
+		if err := InitializeSettings(); err != nil {
+			return nil, fmt.Errorf("failed to initialize settings: %w", err)
+		}
+	}
+
+	// Read the settings file
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read settings file: %w", err)
+	}
+
+	return data, nil
+}
+
+// WriteSettingsFile writes data to the settings.json file in the app directory
+func (fb *FileBrowser) WriteSettingsFile(data []byte) error {
+	settingsPath := filepath.Join(fb.PlatformPath, "settings.json")
+
+	// Validate that it's valid JSON
+	var settings map[string]interface{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("invalid JSON data: %w", err)
+	}
+
+	// Write the file
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write settings file: %w", err)
 	}
 
 	return nil
