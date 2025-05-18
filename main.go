@@ -57,7 +57,7 @@ func main() {
 	app := NewApp()
 	app.register = Registry
 	app.fileBrowser = fileBrowser
-	err := wails.Run(&options.App{
+	apperr := wails.Run(&options.App{
 		Title:  "Kube",
 		Width:  1280,
 		Height: 768,
@@ -81,7 +81,7 @@ func main() {
 		// },
 	})
 
-	if err != nil {
+	if apperr != nil {
 		println("Error Launching the UI:", err.Error())
 	}
 
