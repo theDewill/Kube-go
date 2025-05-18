@@ -1,9 +1,18 @@
 package kubenet
 
 import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -28,7 +37,763 @@ const (
 	StatusOnline  = "online"
 	StatusLocked  = "locked"
 	StatusOffline = "offline"
+	fileChunkPort = 9997
+	maxChunkSize  = 1024 * 1024 // 1MB chunks
 )
+
+type ChunkInfo struct {
+	ChunkID      string `json:"chunk_id"`       // Unique identifier for the chunk
+	FileID       string `json:"file_id"`        // ID of the original file
+	FileName     string `json:"file_name"`      // Original file name
+	ChunkIndex   int    `json:"chunk_index"`    // Index of this chunk in the file
+	TotalChunks  int    `json:"total_chunks"`   // Total number of chunks for this file
+	ChunkSize    int    `json:"chunk_size"`     // Size of this chunk in bytes
+	OriginalSize int64  `json:"original_size"`  // Original file size
+	IsLocal      bool   `json:"is_local"`       // Whether this chunk belongs to the local node
+	OwnerNodeID  string `json:"owner_node_id"`  // ID of the node that owns the original file
+	StoredNodeID string `json:"stored_node_id"` // ID of the node storing this chunk
+	Encrypted    bool   `json:"encrypted"`      // Whether the chunk is encrypted
+}
+
+// ChunkTransferMessage is used to transfer chunks between nodes
+type ChunkTransferMessage struct {
+	ChunkInfo ChunkInfo `json:"chunk_info"` // Metadata about the chunk
+	Data      []byte    `json:"data"`       // The actual chunk data
+}
+
+// ChunkRequestMessage is used to request a chunk from another node
+type ChunkRequestMessage struct {
+	ChunkID string `json:"chunk_id"` // ID of the requested chunk
+	NodeID  string `json:"node_id"`  // ID of the requesting node
+}
+
+// InitializeChunkDatabase initializes the SQLite database for chunk management
+func (nr *NodeRegistry) InitializeChunkDatabase(dbPath string) error {
+	// Ensure directory exists
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create database directory: %w", err)
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Create tables for chunk tracking
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS chunks (
+			chunk_id TEXT PRIMARY KEY,
+			file_id TEXT NOT NULL,
+			file_name TEXT NOT NULL,
+			chunk_index INTEGER NOT NULL,
+			total_chunks INTEGER NOT NULL,
+			chunk_size INTEGER NOT NULL,
+			original_size INTEGER NOT NULL,
+			is_local BOOLEAN NOT NULL,
+			owner_node_id TEXT NOT NULL,
+			stored_node_id TEXT NOT NULL,
+			encrypted BOOLEAN NOT NULL
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_chunks_file_id ON chunks(file_id);
+		CREATE INDEX IF NOT EXISTS idx_chunks_owner_node_id ON chunks(owner_node_id);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create tables: %w", err)
+	}
+
+	return nil
+}
+
+// StartChunkTransferService starts a service to listen for chunk transfer requests
+func (nr *NodeRegistry) StartChunkTransferService(ctx context.Context, kuberestsDir string, dbPath string) error {
+	// Ensure directory exists
+	if err := os.MkdirAll(kuberestsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create kuberests directory: %w", err)
+	}
+
+	// Start listening for chunk transfers
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{
+		IP:   net.IPv4zero,
+		Port: fileChunkPort,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to listen for chunk transfers: %w", err)
+	}
+
+	log.Printf("Started chunk transfer service on port %d", fileChunkPort)
+
+	go func() {
+		// Close the listener when the goroutine exits
+		defer listener.Close()
+
+		// Set up database connection inside the goroutine
+		db, err := sql.Open("sqlite3", dbPath)
+		if err != nil {
+			log.Printf("Failed to open database in chunk transfer service: %v", err)
+			return
+		}
+		defer db.Close()
+
+		buffer := make([]byte, maxChunkSize+1024) // Extra space for metadata
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Chunk transfer service shutting down")
+				return
+			default:
+				// Set a read deadline to avoid blocking forever
+				if err := listener.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+					// Check if the context is done before logging error
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						log.Printf("Failed to set read deadline: %v", err)
+						continue
+					}
+				}
+
+				n, addr, err := listener.ReadFromUDP(buffer)
+				if err != nil {
+					// Check if the context is done before handling error
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						if !errors.Is(err, os.ErrDeadlineExceeded) {
+							log.Printf("Error reading chunk data: %v", err)
+						}
+						continue
+					}
+				}
+
+				// Process the received data in a separate goroutine
+				go func(data []byte, size int, remoteAddr *net.UDPAddr) {
+					// Create a fresh database connection for this handler
+					handlerDB, err := sql.Open("sqlite3", dbPath)
+					if err != nil {
+						log.Printf("Failed to open database for chunk handler: %v", err)
+						return
+					}
+					defer handlerDB.Close()
+
+					// Try to unmarshal as a ChunkTransferMessage
+					var transferMsg ChunkTransferMessage
+					if err := json.Unmarshal(data[:size], &transferMsg); err == nil {
+						// Process chunk transfer
+						nr.handleChunkTransfer(transferMsg, kuberestsDir, handlerDB, remoteAddr)
+						return
+					}
+
+					// Try to unmarshal as a ChunkRequestMessage
+					var requestMsg ChunkRequestMessage
+					if err := json.Unmarshal(data[:size], &requestMsg); err == nil {
+						// Process chunk request
+						nr.handleChunkRequest(requestMsg, kuberestsDir, listener, remoteAddr)
+						return
+					}
+
+					log.Printf("Received unknown message type from %s", remoteAddr)
+				}(buffer[:n], n, addr)
+			}
+		}
+	}()
+
+	return nil
+}
+
+// handleChunkTransfer processes a received chunk and stores it
+func (nr *NodeRegistry) handleChunkTransfer(msg ChunkTransferMessage, kuberestsDir string, db *sql.DB, remoteAddr *net.UDPAddr) {
+	log.Printf("Received chunk %s for file %s from %s", msg.ChunkInfo.ChunkID, msg.ChunkInfo.FileID, remoteAddr)
+
+	// Store the chunk in the kuberests directory
+	chunkPath := filepath.Join(kuberestsDir, msg.ChunkInfo.ChunkID)
+	if err := ioutil.WriteFile(chunkPath, msg.Data, 0644); err != nil {
+		log.Printf("Failed to write chunk to disk: %v", err)
+		return
+	}
+
+	// Store chunk information in the database
+	_, err := db.Exec(`
+		INSERT OR REPLACE INTO chunks
+		(chunk_id, file_id, file_name, chunk_index, total_chunks, chunk_size, original_size, is_local, owner_node_id, stored_node_id, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		msg.ChunkInfo.ChunkID,
+		msg.ChunkInfo.FileID,
+		msg.ChunkInfo.FileName,
+		msg.ChunkInfo.ChunkIndex,
+		msg.ChunkInfo.TotalChunks,
+		msg.ChunkInfo.ChunkSize,
+		msg.ChunkInfo.OriginalSize,
+		false, // Not a local chunk
+		msg.ChunkInfo.OwnerNodeID,
+		nr.localNode.ID, // Store locally
+		msg.ChunkInfo.Encrypted)
+
+	if err != nil {
+		log.Printf("Failed to save chunk info to database: %v", err)
+		return
+	}
+
+	log.Printf("Successfully stored chunk %s for file %s", msg.ChunkInfo.ChunkID, msg.ChunkInfo.FileID)
+}
+
+// handleChunkRequest processes a request for a chunk and sends it back
+func (nr *NodeRegistry) handleChunkRequest(msg ChunkRequestMessage, kuberestsDir string, conn *net.UDPConn, remoteAddr *net.UDPAddr) {
+	log.Printf("Received request for chunk %s from node %s", msg.ChunkID, msg.NodeID)
+
+	// Open the database
+	db, err := sql.Open("sqlite3", filepath.Join(kuberestsDir, "../fileidx.sqlite"))
+	if err != nil {
+		log.Printf("Failed to open database: %v", err)
+		return
+	}
+	defer db.Close()
+
+	// Query for the chunk information
+	var chunkInfo ChunkInfo
+	err = db.QueryRow(`
+		SELECT chunk_id, file_id, file_name, chunk_index, total_chunks, chunk_size, original_size, is_local, owner_node_id, stored_node_id, encrypted
+		FROM chunks WHERE chunk_id = ?
+	`, msg.ChunkID).Scan(
+		&chunkInfo.ChunkID,
+		&chunkInfo.FileID,
+		&chunkInfo.FileName,
+		&chunkInfo.ChunkIndex,
+		&chunkInfo.TotalChunks,
+		&chunkInfo.ChunkSize,
+		&chunkInfo.OriginalSize,
+		&chunkInfo.IsLocal,
+		&chunkInfo.OwnerNodeID,
+		&chunkInfo.StoredNodeID,
+		&chunkInfo.Encrypted,
+	)
+	if err != nil {
+		log.Printf("Failed to find chunk %s in database: %v", msg.ChunkID, err)
+		return
+	}
+
+	// Read the chunk data
+	chunkPath := filepath.Join(kuberestsDir, chunkInfo.ChunkID)
+	chunkData, err := ioutil.ReadFile(chunkPath)
+	if err != nil {
+		log.Printf("Failed to read chunk file: %v", err)
+		return
+	}
+
+	// Create transfer message
+	transferMsg := ChunkTransferMessage{
+		ChunkInfo: chunkInfo,
+		Data:      chunkData,
+	}
+
+	// Serialize the message
+	msgData, err := json.Marshal(transferMsg)
+	if err != nil {
+		log.Printf("Failed to marshal chunk transfer message: %v", err)
+		return
+	}
+
+	// Send the chunk back
+	_, err = conn.WriteToUDP(msgData, remoteAddr)
+	if err != nil {
+		log.Printf("Failed to send chunk: %v", err)
+		return
+	}
+
+	log.Printf("Successfully sent chunk %s to node %s", msg.ChunkID, msg.NodeID)
+}
+
+// DistributeFileChunks distributes file chunks to other nodes in the network
+func (nr *NodeRegistry) DistributeFileChunks(fileID string, filePath string, fileName string, chunkDir string, dbPath string) error {
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	// Get file size
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+	fileSize := fileInfo.Size()
+
+	// Calculate number of chunks
+	numChunks := int((fileSize + maxChunkSize - 1) / maxChunkSize)
+	if numChunks < 1 {
+		numChunks = 1
+	}
+
+	// Get available nodes for distribution
+	nr.RLock()
+	availableNodes := make([]*Node, 0, len(nr.nodes))
+	for id, node := range nr.nodes {
+		if id != nr.localNode.ID && node.Status == StatusOnline {
+			availableNodes = append(availableNodes, node)
+		}
+	}
+	nr.RUnlock()
+
+	// If no other nodes are available, store all chunks locally
+	if len(availableNodes) == 0 {
+		log.Println("No other nodes available, storing all chunks locally")
+	}
+
+	// Create a buffer for reading chunks
+	buffer := make([]byte, maxChunkSize)
+
+	// Open database connection
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Begin a transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Will be committed if no error
+
+	// Prepare chunk insertion statement
+	stmt, err := tx.Prepare(`
+		INSERT INTO chunks
+		(chunk_id, file_id, file_name, chunk_index, total_chunks, chunk_size, original_size, is_local, owner_node_id, stored_node_id, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	// Process each chunk
+	for i := 0; i < numChunks; i++ {
+		// Read a chunk from the file
+		n, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("failed to read chunk: %w", err)
+		}
+		if n == 0 {
+			break // End of file
+		}
+
+		// Generate a chunk ID using SHA-256 of fileID + index
+		chunkIDSource := fmt.Sprintf("%s-%d", fileID, i)
+		chunkIDHash := sha256.Sum256([]byte(chunkIDSource))
+		chunkID := base64.URLEncoding.EncodeToString(chunkIDHash[:])
+
+		// Encrypt the chunk
+		encryptedData, err := encryptData(buffer[:n])
+		if err != nil {
+			return fmt.Errorf("failed to encrypt chunk: %w", err)
+		}
+
+		// Decide where to store this chunk
+		var targetNode *Node
+		isLocal := true
+		storedNodeID := nr.localNode.ID
+
+		if len(availableNodes) > 0 {
+			// Select a node based on chunk index for even distribution
+			targetNode = availableNodes[i%len(availableNodes)]
+			isLocal = false
+			storedNodeID = targetNode.ID
+		}
+
+		// Create chunk info
+		chunkInfo := ChunkInfo{
+			ChunkID:      chunkID,
+			FileID:       fileID,
+			FileName:     fileName,
+			ChunkIndex:   i,
+			TotalChunks:  numChunks,
+			ChunkSize:    n,
+			OriginalSize: fileSize,
+			IsLocal:      isLocal,
+			OwnerNodeID:  nr.localNode.ID,
+			StoredNodeID: storedNodeID,
+			Encrypted:    true,
+		}
+
+		// Store chunk info in the database
+		_, err = stmt.Exec(
+			chunkInfo.ChunkID,
+			chunkInfo.FileID,
+			chunkInfo.FileName,
+			chunkInfo.ChunkIndex,
+			chunkInfo.TotalChunks,
+			chunkInfo.ChunkSize,
+			chunkInfo.OriginalSize,
+			chunkInfo.IsLocal,
+			chunkInfo.OwnerNodeID,
+			chunkInfo.StoredNodeID,
+			chunkInfo.Encrypted,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert chunk info: %w", err)
+		}
+
+		if isLocal {
+			// Store the chunk locally
+			chunkPath := filepath.Join(chunkDir, chunkID)
+			if err := ioutil.WriteFile(chunkPath, encryptedData, 0644); err != nil {
+				return fmt.Errorf("failed to write local chunk: %w", err)
+			}
+		} else {
+			// Send the chunk to the target node
+			if err := nr.sendChunkToNode(chunkInfo, encryptedData, targetNode); err != nil {
+				// If we fail to send to remote node, store locally as a fallback
+				log.Printf("Failed to send chunk to node %s: %v, storing locally", targetNode.ID, err)
+
+				// Update the database to mark as local
+				_, err = tx.Exec(
+					"UPDATE chunks SET is_local = ?, stored_node_id = ? WHERE chunk_id = ?",
+					true, nr.localNode.ID, chunkID,
+				)
+				if err != nil {
+					return fmt.Errorf("failed to update chunk info: %w", err)
+				}
+
+				// Store locally
+				chunkPath := filepath.Join(chunkDir, chunkID)
+				if err := ioutil.WriteFile(chunkPath, encryptedData, 0644); err != nil {
+					return fmt.Errorf("failed to write fallback local chunk: %w", err)
+				}
+			}
+		}
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	log.Printf("Successfully distributed file %s in %d chunks", fileID, numChunks)
+	return nil
+}
+
+// ReassembleFile reconstructs a file from its chunks
+func (nr *NodeRegistry) ReassembleFile(fileID string, outputPath string, kuberestsDir string, dbPath string) error {
+	// Open database connection
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Get file information
+	var fileName string
+	var totalChunks int
+	var originalSize int64
+
+	err = db.QueryRow(
+		"SELECT file_name, total_chunks, original_size FROM chunks WHERE file_id = ? LIMIT 1",
+		fileID,
+	).Scan(&fileName, &totalChunks, &originalSize)
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	// Create the output file
+	outputFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer outputFile.Close()
+
+	// Get information about all chunks for this file
+	rows, err := db.Query(
+		"SELECT chunk_id, chunk_index, is_local, stored_node_id FROM chunks WHERE file_id = ? ORDER BY chunk_index",
+		fileID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to query chunks: %w", err)
+	}
+	defer rows.Close()
+
+	// Prepare a map of chunks to collect
+	type chunkMetadata struct {
+		ChunkID      string
+		ChunkIndex   int
+		IsLocal      bool
+		StoredNodeID string
+	}
+
+	chunkMap := make(map[int]chunkMetadata)
+	for rows.Next() {
+		var cm chunkMetadata
+		if err := rows.Scan(&cm.ChunkID, &cm.ChunkIndex, &cm.IsLocal, &cm.StoredNodeID); err != nil {
+			return fmt.Errorf("failed to scan chunk row: %w", err)
+		}
+		chunkMap[cm.ChunkIndex] = cm
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating chunk rows: %w", err)
+	}
+
+	// Check if we have information about all chunks
+	if len(chunkMap) != totalChunks {
+		return fmt.Errorf("missing chunks: found %d of %d", len(chunkMap), totalChunks)
+	}
+
+	// Create a wait group for parallel fetch operations
+	var wg sync.WaitGroup
+	chunkDataMap := make(map[int][]byte, totalChunks)
+	chunkMapMutex := sync.Mutex{}
+	var fetchError error
+	var errorMutex sync.Mutex
+
+	// Process each chunk
+	for i := 0; i < totalChunks; i++ {
+		cm, exists := chunkMap[i]
+		if !exists {
+			return fmt.Errorf("missing chunk index %d", i)
+		}
+
+		wg.Add(1)
+		go func(index int, metadata chunkMetadata) {
+			defer wg.Done()
+
+			var chunkData []byte
+			var err error
+
+			if metadata.IsLocal {
+				// Read the chunk locally
+				chunkPath := filepath.Join(kuberestsDir, metadata.ChunkID)
+				chunkData, err = ioutil.ReadFile(chunkPath)
+				if err != nil {
+					errorMutex.Lock()
+					fetchError = fmt.Errorf("failed to read local chunk %d: %w", index, err)
+					errorMutex.Unlock()
+					return
+				}
+			} else {
+				// Request the chunk from the remote node
+				chunkData, err = nr.requestChunkFromNode(metadata.ChunkID, metadata.StoredNodeID)
+				if err != nil {
+					errorMutex.Lock()
+					fetchError = fmt.Errorf("failed to request chunk %d from node %s: %w",
+						index, metadata.StoredNodeID, err)
+					errorMutex.Unlock()
+					return
+				}
+			}
+
+			// Decrypt the chunk
+			decryptedData, err := decryptData(chunkData)
+			if err != nil {
+				errorMutex.Lock()
+				fetchError = fmt.Errorf("failed to decrypt chunk %d: %w", index, err)
+				errorMutex.Unlock()
+				return
+			}
+
+			// Store the decrypted chunk data
+			chunkMapMutex.Lock()
+			chunkDataMap[index] = decryptedData
+			chunkMapMutex.Unlock()
+		}(i, cm)
+	}
+
+	// Wait for all chunks to be processed
+	wg.Wait()
+
+	// Check if there was an error during fetching
+	if fetchError != nil {
+		return fetchError
+	}
+
+	// Write chunks to the output file in order
+	for i := 0; i < totalChunks; i++ {
+		data, exists := chunkDataMap[i]
+		if !exists {
+			return fmt.Errorf("chunk %d missing from result map", i)
+		}
+
+		if _, err := outputFile.Write(data); err != nil {
+			return fmt.Errorf("failed to write chunk %d to output file: %w", i, err)
+		}
+	}
+
+	// Ensure the file is the correct size
+	if err := outputFile.Truncate(originalSize); err != nil {
+		return fmt.Errorf("failed to truncate output file: %w", err)
+	}
+
+	log.Printf("Successfully reassembled file %s from %d chunks", fileName, totalChunks)
+	return nil
+}
+
+// sendChunkToNode sends a chunk to another node
+func (nr *NodeRegistry) sendChunkToNode(chunkInfo ChunkInfo, chunkData []byte, targetNode *Node) error {
+	// Create a UDP connection
+	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP(targetNode.IP),
+		Port: fileChunkPort,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to dial UDP: %w", err)
+	}
+	defer conn.Close()
+
+	// Create the transfer message
+	transferMsg := ChunkTransferMessage{
+		ChunkInfo: chunkInfo,
+		Data:      chunkData,
+	}
+
+	// Serialize the message
+	msgData, err := json.Marshal(transferMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal chunk transfer message: %w", err)
+	}
+
+	// Send the message
+	_, err = conn.Write(msgData)
+	if err != nil {
+		return fmt.Errorf("failed to send chunk: %w", err)
+	}
+
+	log.Printf("Sent chunk %s to node %s", chunkInfo.ChunkID, targetNode.ID)
+	return nil
+}
+
+// requestChunkFromNode requests a chunk from another node
+func (nr *NodeRegistry) requestChunkFromNode(chunkID string, nodeID string) ([]byte, error) {
+	// Find the node
+	nr.RLock()
+	node, exists := nr.nodes[nodeID]
+	nr.RUnlock()
+	if !exists {
+		return nil, fmt.Errorf("node %s not found", nodeID)
+	}
+
+	// Create a UDP connection
+	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP(node.IP),
+		Port: fileChunkPort,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial UDP: %w", err)
+	}
+	defer conn.Close()
+
+	// Create the request message
+	requestMsg := ChunkRequestMessage{
+		ChunkID: chunkID,
+		NodeID:  nr.localNode.ID,
+	}
+
+	// Serialize the message
+	msgData, err := json.Marshal(requestMsg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal chunk request message: %w", err)
+	}
+
+	// Send the request
+	_, err = conn.Write(msgData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send chunk request: %w", err)
+	}
+
+	// Wait for the response (with timeout)
+	responseBuffer := make([]byte, maxChunkSize+1024) // Extra space for metadata
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, _, err := conn.ReadFromUDP(responseBuffer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to receive chunk: %w", err)
+	}
+
+	// Parse the response
+	var transferMsg ChunkTransferMessage
+	if err := json.Unmarshal(responseBuffer[:n], &transferMsg); err != nil {
+		return nil, fmt.Errorf("failed to parse chunk response: %w", err)
+	}
+
+	// Verify the chunk ID
+	if transferMsg.ChunkInfo.ChunkID != chunkID {
+		return nil, fmt.Errorf("received wrong chunk: expected %s, got %s",
+			chunkID, transferMsg.ChunkInfo.ChunkID)
+	}
+
+	log.Printf("Received chunk %s from node %s", chunkID, nodeID)
+	return transferMsg.Data, nil
+}
+
+// Encryption and decryption helpers
+
+// encryptData encrypts the given data using AES-256-GCM
+func encryptData(data []byte) ([]byte, error) {
+	// For a real implementation, you'd use a proper key management system
+	// This is a simplified version for demonstration
+	key := make([]byte, 32) // AES-256 key
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Encrypt and prepend the key and nonce
+	ciphertext := gcm.Seal(nil, nonce, data, nil)
+	result := make([]byte, len(key)+len(nonce)+len(ciphertext))
+
+	copy(result, key)
+	copy(result[len(key):], nonce)
+	copy(result[len(key)+len(nonce):], ciphertext)
+
+	return result, nil
+}
+
+// decryptData decrypts the given data
+func decryptData(data []byte) ([]byte, error) {
+	// Extract the key, nonce, and ciphertext
+	if len(data) < 32+12 { // Key + nonce
+		return nil, fmt.Errorf("data too short to contain key and nonce")
+	}
+
+	key := data[:32]
+	nonce := data[32 : 32+12] // GCM nonce is 12 bytes
+	ciphertext := data[32+12:]
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return plaintext, nil
+}
 
 // Node represents a discovered machine in the network
 type Node struct {
@@ -48,6 +813,8 @@ type NodeRegistry struct {
 	localNode       *Node                  // Our own node
 	persistDir      string                 // Directory for persistence file
 	statusListeners []func(string, string) // Callbacks for status changes (nodeID, status)
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 // BroadcastMessage is the structure sent over the network
@@ -78,8 +845,11 @@ func NewNodeRegistry(persistDir string) (*NodeRegistry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get local IP: %w", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 
 	registry := &NodeRegistry{
+		ctx:             ctx,
+		cancel:          cancel,
 		nodes:           make(map[string]*Node),
 		persistDir:      persistDir,
 		statusListeners: make([]func(string, string), 0),
@@ -175,10 +945,16 @@ func (nr *NodeRegistry) GetNodesForFrontend() []map[string]interface{} {
 
 	return nodes
 }
+func (nr *NodeRegistry) GetContext() context.Context {
+	return nr.ctx
+}
 
 // Start begins the broadcasting and listening processes
+
+// MAYBE: change the sole context in NodeRegistry to App CTX if needed by adding param here
 func (nr *NodeRegistry) Start(Done <-chan struct{}) error {
 	// Try to load previous state
+
 	if err := nr.loadFromDisk(); err != nil {
 		log.Printf("Warning: could not load previous node state: %v", err)
 	}

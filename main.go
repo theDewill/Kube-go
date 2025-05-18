@@ -25,12 +25,12 @@ func main() {
 		println("Error:", NRegErr.Error())
 	}
 
-	fileBrowser, fbErr := kfiles.LaunchFileBrowser()
+	fileBrowser, fbErr := kfiles.LaunchFileBrowser(Registry)
 	RFG := RFG.CreateRefrigirator("1.0", "no index", fileBrowser)
 	if fbErr != nil {
 		log.Fatalf("Error initializing File Browser: %v", fbErr)
 	}
-	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir)
+	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir, fileBrowser.KubeRestsDir)
 
 	appDir := "/Users/nominsendinu/DEWILL/CODE/Projects/kube-go"
 	dbPath := filepath.Join(appDir, "db/fileidx.sqlite") //<-TOENV

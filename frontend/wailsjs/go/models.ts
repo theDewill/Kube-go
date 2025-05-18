@@ -1,5 +1,43 @@
 export namespace kfiles {
 	
+	export class FileBrowser {
+	    PlatformPath: string;
+	    KubeLoadsDir: string;
+	    KubeRestsDir: string;
+	    DbPath: string;
+	    NodeRegistry?: kubenet.NodeRegistry;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileBrowser(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.PlatformPath = source["PlatformPath"];
+	        this.KubeLoadsDir = source["KubeLoadsDir"];
+	        this.KubeRestsDir = source["KubeRestsDir"];
+	        this.DbPath = source["DbPath"];
+	        this.NodeRegistry = this.convertValues(source["NodeRegistry"], kubenet.NodeRegistry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FileType {
 	    id: string;
 	    name: string;
@@ -17,6 +55,7 @@ export namespace kfiles {
 	    isShared: boolean;
 	    sharedWith?: string[];
 	    itemCount?: number;
+	    isDistributed?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new FileType(source);
@@ -39,6 +78,7 @@ export namespace kfiles {
 	        this.isShared = source["isShared"];
 	        this.sharedWith = source["sharedWith"];
 	        this.itemCount = source["itemCount"];
+	        this.isDistributed = source["isDistributed"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -58,6 +98,30 @@ export namespace kfiles {
 		    }
 		    return a;
 		}
+	}
+	export class StorageInfo {
+	    total_used: number;
+	    total_used_mb: number;
+	    total_used_gb: number;
+	    percentage_used: number;
+	    total_capacity: number;
+	    remaining_bytes: number;
+	    remaining_gb: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new StorageInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total_used = source["total_used"];
+	        this.total_used_mb = source["total_used_mb"];
+	        this.total_used_gb = source["total_used_gb"];
+	        this.percentage_used = source["percentage_used"];
+	        this.total_capacity = source["total_capacity"];
+	        this.remaining_bytes = source["remaining_bytes"];
+	        this.remaining_gb = source["remaining_gb"];
+	    }
 	}
 
 }
@@ -106,6 +170,18 @@ export namespace kubenet {
 		    }
 		    return a;
 		}
+	}
+	export class NodeRegistry {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeRegistry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
 	}
 
 }

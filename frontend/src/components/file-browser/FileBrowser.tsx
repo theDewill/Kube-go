@@ -2,13 +2,20 @@ import { useState, useEffect } from "react";
 import { FileGrid } from "./FileGrid";
 import { FileList } from "./FileList";
 import { Breadcrumb } from "./Breadcrumb";
-import { FileUpload } from "./FileUpload";
 import { Button } from "@/components/ui/button";
-import { FolderPlus, Upload, RefreshCw, Filter, LayoutGrid, List as ListIcon } from "lucide-react";
+import {
+  FolderPlus,
+  Upload,
+  RefreshCw,
+  Filter,
+  LayoutGrid,
+  List as ListIcon,
+  CloudUpload,
+  Cloud,
+} from "lucide-react";
 import { toast } from "sonner";
-import { mockFiles, mockFolders } from "@/data/mock-files";
-import { File, Folder } from "@/types/file-types";
 import { FileBrowserAPI } from "@/lib/file-api";
+import { File, Folder } from "@/types/file-types";
 import {
   Dialog,
   DialogContent,
@@ -18,117 +25,108 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// export function FileBrowser() {
-//   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-//   const [currentPath, setCurrentPath] = useState("/");
-//   const [isRefreshing, setIsRefreshing] = useState(false);
-//   const [isUploading, setIsUploading] = useState(false);
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
-//   const toggleViewMode = () => {
-//     setViewMode(viewMode === "grid" ? "list" : "grid");
-//   };
+export function FileUpload({ onUpload, isUploading }) {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [distribute, setDistribute] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
-//   const refreshFiles = () => {
-//     setIsRefreshing(true);
-//     setTimeout(() => {
-//       setIsRefreshing(false);
-//       toast.success("Files refreshed");
-//     }, 1000);
-//   };
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
 
-//   const createFolder = () => {
-//     toast.info("Create folder dialog coming soon");
-//   };
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast.error("Please select a file to upload");
+      return;
+    }
 
-//   const showFilters = () => {
-//     toast.info("Advanced filters coming soon");
-//   };
+    try {
+      await onUpload(selectedFile, distribute);
+      setSelectedFile(null);
+      setUploadDialogOpen(false);
+      setDistribute(false);
+    } catch (error) {
+      toast.error(`Upload failed: ${error.message}`);
+    }
+  };
 
-//   const handleUpload = () => {
-//     setIsUploading(true);
-//     setTimeout(() => {
-//       setIsUploading(false);
-//       toast.success("File uploaded successfully");
-//     }, 2000);
-//   };
-
-//   const navigateToFolder = (path: string) => {
-//     setCurrentPath(path);
-//     toast.info(`Navigated to ${path}`);
-//   };
-
-//   return (
-//     <div className="h-full flex flex-col">
-//       <div className="flex flex-col gap-4">
-//         <div className="flex items-center justify-between">
-//           <Breadcrumb path={currentPath} onNavigate={navigateToFolder} />
-//           <div className="flex items-center gap-2">
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={refreshFiles}
-//               disabled={isRefreshing}
-//             >
-//               <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-//               Refresh
-//             </Button>
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={showFilters}
-//             >
-//               <Filter className="h-4 w-4 mr-2" />
-//               Filters
-//             </Button>
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={toggleViewMode}
-//             >
-//               {viewMode === "grid" ? (
-//                 <>
-//                   <ListIcon className="h-4 w-4 mr-2" />
-//                   List
-//                 </>
-//               ) : (
-//                 <>
-//                   <LayoutGrid className="h-4 w-4 mr-2" />
-//                   Grid
-//                 </>
-//               )}
-//             </Button>
-//           </div>
-//         </div>
-
-//         <div className="flex flex-wrap items-center gap-2">
-//           <Button onClick={createFolder} variant="outline" size="sm">
-//             <FolderPlus className="h-4 w-4 mr-2" />
-//             New Folder
-//           </Button>
-//           <FileUpload onUpload={handleUpload} isUploading={isUploading} />
-//         </div>
-//       </div>
-
-//       <div className="mt-6 flex-1 overflow-auto">
-//         {viewMode === "grid" ? (
-//           <FileGrid
-//             files={mockFiles}
-//             folders={mockFolders}
-//             onFolderClick={navigateToFolder}
-//           />
-//         ) : (
-//           <FileList
-//             files={mockFiles}
-//             folders={mockFolders}
-//             onFolderClick={navigateToFolder}
-//           />
-//         )}
-//       </div>
-//     </div>
-//   );
-// }
+  return (
+    <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" onClick={() => setUploadDialogOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Upload File
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Upload File</DialogTitle>
+          <DialogDescription>Choose a file to upload to the current directory.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="file">File</Label>
+            <Input id="file" type="file" onChange={handleFileChange} disabled={isUploading} />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="distribute"
+              checked={distribute}
+              onCheckedChange={setDistribute}
+              disabled={isUploading}
+            />
+            <Label htmlFor="distribute" className="flex items-center cursor-pointer">
+              <Cloud className="h-4 w-4 mr-2 text-primary" />
+              Distribute across network nodes
+              <Badge variant="outline" className="ml-2 text-xs">
+                Beta
+              </Badge>
+            </Label>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {distribute
+              ? "The file will be chunked, encrypted, and distributed across available nodes in the network. This improves redundancy and availability."
+              : "The file will be stored locally on this device only."}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="submit" onClick={handleUpload} disabled={!selectedFile || isUploading}>
+            {isUploading ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : distribute ? (
+              <>
+                <CloudUpload className="h-4 w-4 mr-2" />
+                Distribute
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function FileBrowser() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -140,9 +138,27 @@ export function FileBrowser() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
+  const [networkNodes, setNetworkNodes] = useState([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch directory contents when path changes or refresh is triggered
+  // Fetch network nodes
+  useEffect(() => {
+    const fetchNetworkNodes = async () => {
+      try {
+        const nodes = await FileBrowserAPI.getNetworkNodes();
+        setNetworkNodes(nodes);
+      } catch (err) {
+        console.error("Failed to fetch network nodes:", err);
+      }
+    };
+
+    fetchNetworkNodes();
+    const interval = setInterval(fetchNetworkNodes, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch directory contents
   useEffect(() => {
     loadDirectoryContents();
   }, [currentPath]);
@@ -201,11 +217,11 @@ export function FileBrowser() {
     toast.info("Advanced filters coming soon");
   };
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (file: File, distribute: boolean) => {
     setIsUploading(true);
     try {
-      await FileBrowserAPI.uploadFile(currentPath, file);
-      toast.success(`${file.name} uploaded successfully`);
+      await FileBrowserAPI.uploadFile(currentPath, file, distribute);
+      toast.success(`${file.name} ${distribute ? "distributed" : "uploaded"} successfully`);
       await loadDirectoryContents();
     } catch (err) {
       toast.error(`Failed to upload file: ${err}`);
@@ -235,18 +251,18 @@ export function FileBrowser() {
             await loadDirectoryContents();
           }
           break;
-        case "Refrigerate":
+        case "Download":
           if (item.type === "file") {
-            await FileBrowserAPI.refrigerateFile(item.path);
-            toast.success(`${item.name} refrigerated`);
-            await loadDirectoryContents();
-          }
-          break;
-        case "Unrefrigerate":
-          if (item.type === "file") {
-            await FileBrowserAPI.unrefrigerateFile(item.path);
-            toast.success(`${item.name} unrefrigerated`);
-            await loadDirectoryContents();
+            const blob = await FileBrowserAPI.downloadFile(item.path);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = item.name;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            toast.success(`Downloaded ${item.name}`);
           }
           break;
         default:
@@ -257,12 +273,22 @@ export function FileBrowser() {
     }
   };
 
+  // Count available online nodes
+  const onlineNodesCount = networkNodes.filter(
+    (node) => node.status === "online" || node.status === "locked",
+  ).length;
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <Breadcrumb path={currentPath} onNavigate={navigateToFolder} />
           <div className="flex items-center gap-2">
+            <Badge variant={onlineNodesCount > 1 ? "success" : "secondary"} className="mr-2">
+              <Cloud className="h-3 w-3 mr-1" />
+              {onlineNodesCount} {onlineNodesCount === 1 ? "node" : "nodes"} online
+            </Badge>
+
             <Button
               variant="outline"
               size="sm"
@@ -329,6 +355,7 @@ export function FileBrowser() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
           <FileUpload onUpload={handleUpload} isUploading={isUploading} />
         </div>
       </div>

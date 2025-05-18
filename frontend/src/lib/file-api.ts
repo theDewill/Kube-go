@@ -1,5 +1,5 @@
 // src/lib/file-api.ts
-import { File, Folder } from "@/types/file-types";
+import { File as FileType, Folder } from "@/types/file-types";
 import {
   ListDirectory,
   CreateFolder,
@@ -7,16 +7,12 @@ import {
   DeleteItem,
   UploadFile,
   DownloadFile,
-  CopyItem,
-  MoveItem,
-  RefrigerateFile,
-  UnrefrigerateFile,
-  GetFileInfo,
 } from "@/../wailsjs/go/kfiles/FileBrowser";
+import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 
 // Define return type for the ListDirectory method
 export interface DirectoryContents {
-  files: File[];
+  files: FileType[];
   folders: Folder[];
 }
 
@@ -28,7 +24,7 @@ export class FileBrowserAPI {
       const items = await ListDirectory(path);
 
       // Separate files and folders
-      const files: File[] = [];
+      const files: FileType[] = [];
       const folders: Folder[] = [];
 
       for (const item of items) {
@@ -61,6 +57,7 @@ export class FileBrowserAPI {
             owner: item.owner,
             isShared: item.isShared,
             sharedWith: item.sharedWith || [],
+            isDistributed: item.isDistributed || false,
           });
         }
       }
@@ -103,11 +100,13 @@ export class FileBrowserAPI {
   }
 
   // Upload a file
-  static async uploadFile(path: string, file: File): Promise<void> {
+  static async uploadFile(path: string, file: File, distribute: boolean = false): Promise<void> {
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
-      await UploadFile(path, file.name, bytes);
+      // Convert Uint8Array to regular array for Wails compatibility
+      const byteArray = Array.from(bytes);
+      await UploadFile(path, file.name, byteArray, distribute);
     } catch (error) {
       console.error("Error uploading file:", error);
       throw error;
@@ -125,84 +124,12 @@ export class FileBrowserAPI {
     }
   }
 
-  // Copy a file or folder
-  static async copyItem(sourcePath: string, destinationPath: string): Promise<void> {
+  // Get nodes in the network
+  static async getNetworkNodes(): Promise<any[]> {
     try {
-      await CopyItem(sourcePath, destinationPath);
+      return await GetNodesForFrontend();
     } catch (error) {
-      console.error("Error copying item:", error);
-      throw error;
-    }
-  }
-
-  // Move a file or folder
-  static async moveItem(sourcePath: string, destinationPath: string): Promise<void> {
-    try {
-      await MoveItem(sourcePath, destinationPath);
-    } catch (error) {
-      console.error("Error moving item:", error);
-      throw error;
-    }
-  }
-
-  // Refrigerate (compress) a file
-  static async refrigerateFile(path: string): Promise<void> {
-    try {
-      await RefrigerateFile(path);
-    } catch (error) {
-      console.error("Error refrigerating file:", error);
-      throw error;
-    }
-  }
-
-  // Unrefrigerate (decompress) a file
-  static async unrefrigerateFile(path: string): Promise<void> {
-    try {
-      await UnrefrigerateFile(path);
-    } catch (error) {
-      console.error("Error unrefrigerating file:", error);
-      throw error;
-    }
-  }
-
-  // Get file or folder info
-  static async getFileInfo(path: string): Promise<File | Folder> {
-    try {
-      const item = await GetFileInfo(path);
-
-      if (item.type === "folder") {
-        return {
-          id: item.id,
-          name: item.name,
-          type: "folder",
-          path: item.path,
-          itemCount: item.itemCount,
-          lastModified: item.lastModified,
-          lastModifiedDate: new Date(item.lastModifiedDate),
-          owner: item.owner,
-          isShared: item.isShared,
-          sharedWith: item.sharedWith || [],
-        };
-      } else {
-        return {
-          id: item.id,
-          name: item.name,
-          type: "file",
-          extension: item.extension,
-          path: item.path,
-          size: item.size,
-          sizeInBytes: item.sizeInBytes,
-          lastModified: item.lastModified,
-          lastModifiedDate: new Date(item.lastModifiedDate),
-          isRefrigerated: item.isRefrigerated,
-          compressionRatio: item.compressionRatio,
-          owner: item.owner,
-          isShared: item.isShared,
-          sharedWith: item.sharedWith || [],
-        };
-      }
-    } catch (error) {
-      console.error("Error getting file info:", error);
+      console.error("Error getting network nodes:", error);
       throw error;
     }
   }

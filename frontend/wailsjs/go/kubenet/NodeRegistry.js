@@ -6,6 +6,14 @@ export function AddStatusListener(arg1) {
   return window['go']['kubenet']['NodeRegistry']['AddStatusListener'](arg1);
 }
 
+export function DistributeFileChunks(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['kubenet']['NodeRegistry']['DistributeFileChunks'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GetContext() {
+  return window['go']['kubenet']['NodeRegistry']['GetContext']();
+}
+
 export function GetNodeByID(arg1) {
   return window['go']['kubenet']['NodeRegistry']['GetNodeByID'](arg1);
 }
@@ -20,6 +28,10 @@ export function GetNodesForFrontend() {
 
 export function GetNodesForFrontend_old() {
   return window['go']['kubenet']['NodeRegistry']['GetNodesForFrontend_old']();
+}
+
+export function InitializeChunkDatabase(arg1) {
+  return window['go']['kubenet']['NodeRegistry']['InitializeChunkDatabase'](arg1);
 }
 
 export function Lock() {
@@ -42,12 +54,20 @@ export function RUnlock() {
   return window['go']['kubenet']['NodeRegistry']['RUnlock']();
 }
 
+export function ReassembleFile(arg1, arg2, arg3, arg4) {
+  return window['go']['kubenet']['NodeRegistry']['ReassembleFile'](arg1, arg2, arg3, arg4);
+}
+
 export function SetNodeStatus(arg1) {
   return window['go']['kubenet']['NodeRegistry']['SetNodeStatus'](arg1);
 }
 
 export function Start(arg1) {
   return window['go']['kubenet']['NodeRegistry']['Start'](arg1);
+}
+
+export function StartChunkTransferService(arg1, arg2, arg3) {
+  return window['go']['kubenet']['NodeRegistry']['StartChunkTransferService'](arg1, arg2, arg3);
 }
 
 export function TryLock() {

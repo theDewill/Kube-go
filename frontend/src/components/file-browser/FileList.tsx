@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   Table,
@@ -27,6 +26,7 @@ import {
   Snowflake,
   ChevronDown,
   ChevronUp,
+  Cloud,
 } from "lucide-react";
 import { File as FileType, Folder as FolderType } from "@/types/file-types";
 import { Button } from "@/components/ui/button";
@@ -34,17 +34,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { fileIconMap } from "@/lib/file-icons";
 import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 interface FileListProps {
   files: FileType[];
   folders: FolderType[];
   onFolderClick: (path: string) => void;
+  onContextAction: (action: string, item: FileType | FolderType) => void;
 }
 
 type SortField = "name" | "size" | "lastModified" | "type";
 type SortDirection = "asc" | "desc";
 
-export function FileList({ files, folders, onFolderClick }: FileListProps) {
+export function FileList({ files, folders, onFolderClick, onContextAction }: FileListProps) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -58,17 +60,11 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
     }
   };
 
-  const handleContextAction = (action: string, item: FileType | FolderType) => {
-    toast.info(`${action} ${item.name} (coming soon)`);
-  };
-
   const handleItemClick = (item: FileType | FolderType, event: React.MouseEvent) => {
     if (event.ctrlKey || event.metaKey) {
       // Toggle selection
-      setSelectedItems(prev =>
-        prev.includes(item.id)
-          ? prev.filter(id => id !== item.id)
-          : [...prev, item.id]
+      setSelectedItems((prev) =>
+        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id],
       );
     } else if (item.type === "folder") {
       onFolderClick(item.path);
@@ -78,23 +74,21 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
   };
 
   const toggleSelect = (item: FileType | FolderType) => {
-    setSelectedItems(prev =>
-      prev.includes(item.id)
-        ? prev.filter(id => id !== item.id)
-        : [...prev, item.id]
+    setSelectedItems((prev) =>
+      prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id],
     );
   };
 
   const folderRows = folders.map((folder) => (
     <ContextMenu key={folder.id}>
       <ContextMenuTrigger>
-        <TableRow 
-          className={`cursor-pointer ${selectedItems.includes(folder.id) ? 'bg-muted' : ''}`}
+        <TableRow
+          className={`cursor-pointer ${selectedItems.includes(folder.id) ? "bg-muted" : ""}`}
           onClick={(e) => handleItemClick(folder, e)}
         >
           <TableCell className="w-10">
-            <Checkbox 
-              checked={selectedItems.includes(folder.id)} 
+            <Checkbox
+              checked={selectedItems.includes(folder.id)}
               onCheckedChange={() => toggleSelect(folder)}
               onClick={(e) => e.stopPropagation()}
             />
@@ -108,31 +102,29 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
           <TableCell>Folder</TableCell>
           <TableCell>{folder.itemCount} items</TableCell>
           <TableCell>{folder.lastModified}</TableCell>
-          <TableCell>-</TableCell>
+          <TableCell>{folder.owner}</TableCell>
         </TableRow>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={() => handleContextAction("Open", folder)}>
-          Open
-        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onContextAction("Open", folder)}>Open</ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => handleContextAction("Rename", folder)}>
+        <ContextMenuItem onClick={() => onContextAction("Rename", folder)}>
           <Edit className="h-4 w-4 mr-2" /> Rename
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => handleContextAction("Copy", folder)}>
+        <ContextMenuItem onClick={() => onContextAction("Copy", folder)}>
           <Copy className="h-4 w-4 mr-2" /> Copy
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => handleContextAction("Move", folder)}>
+        <ContextMenuItem onClick={() => onContextAction("Move", folder)}>
           <Move className="h-4 w-4 mr-2" /> Move
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => handleContextAction("Share", folder)}>
+        <ContextMenuItem onClick={() => onContextAction("Share", folder)}>
           <Share2 className="h-4 w-4 mr-2" /> Share
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           className="text-destructive focus:text-destructive"
-          onClick={() => handleContextAction("Delete", folder)}
+          onClick={() => onContextAction("Delete", folder)}
         >
           <Trash2 className="h-4 w-4 mr-2" /> Delete
         </ContextMenuItem>
@@ -143,27 +135,43 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
   const fileRows = files.map((file) => {
     const FileIcon = fileIconMap[file.extension] || File;
     const isRefrigerated = file.isRefrigerated;
+    const isDistributed = file.isDistributed;
 
     return (
       <ContextMenu key={file.id}>
         <ContextMenuTrigger>
-          <TableRow 
-            className={`cursor-pointer ${selectedItems.includes(file.id) ? 'bg-muted' : ''}`}
+          <TableRow
+            className={`cursor-pointer ${selectedItems.includes(file.id) ? "bg-muted" : ""}`}
             onClick={(e) => handleItemClick(file, e)}
           >
             <TableCell className="w-10">
-              <Checkbox 
-                checked={selectedItems.includes(file.id)} 
+              <Checkbox
+                checked={selectedItems.includes(file.id)}
                 onCheckedChange={() => toggleSelect(file)}
                 onClick={(e) => e.stopPropagation()}
               />
             </TableCell>
             <TableCell>
               <div className="flex items-center space-x-2">
-                <FileIcon className={`h-5 w-5 ${isRefrigerated ? 'text-icebox-700' : 'text-muted-foreground'}`} />
-                <span className="flex items-center">
+                <FileIcon
+                  className={`h-5 w-5 ${isRefrigerated ? "text-icebox-700" : "text-muted-foreground"}`}
+                />
+                <span className="flex items-center gap-2">
                   {file.name}
-                  {isRefrigerated && <Snowflake className="h-4 w-4 ml-2 text-icebox-600" />}
+                  <div className="flex items-center gap-1">
+                    {isRefrigerated && (
+                      <Badge variant="outline" className="text-xs">
+                        <Snowflake className="h-3 w-3 mr-1" />
+                        Refrigerated
+                      </Badge>
+                    )}
+                    {isDistributed && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Cloud className="h-3 w-3 mr-1" />
+                        Distributed
+                      </Badge>
+                    )}
+                  </div>
                 </span>
               </div>
             </TableCell>
@@ -174,39 +182,37 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
           </TableRow>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => handleContextAction("Open", file)}>
-            Open
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => handleContextAction("Download", file)}>
+          <ContextMenuItem onClick={() => onContextAction("Open", file)}>Open</ContextMenuItem>
+          <ContextMenuItem onClick={() => onContextAction("Download", file)}>
             <Download className="h-4 w-4 mr-2" /> Download
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={() => handleContextAction("Rename", file)}>
+          <ContextMenuItem onClick={() => onContextAction("Rename", file)}>
             <Edit className="h-4 w-4 mr-2" /> Rename
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => handleContextAction("Copy", file)}>
+          <ContextMenuItem onClick={() => onContextAction("Copy", file)}>
             <Copy className="h-4 w-4 mr-2" /> Copy
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => handleContextAction("Move", file)}>
+          <ContextMenuItem onClick={() => onContextAction("Move", file)}>
             <Move className="h-4 w-4 mr-2" /> Move
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={() => handleContextAction("Share", file)}>
+          <ContextMenuItem onClick={() => onContextAction("Share", file)}>
             <Share2 className="h-4 w-4 mr-2" /> Share
           </ContextMenuItem>
           {isRefrigerated ? (
-            <ContextMenuItem onClick={() => handleContextAction("Unrefrigerate", file)}>
+            <ContextMenuItem onClick={() => onContextAction("Unrefrigerate", file)}>
               <Snowflake className="h-4 w-4 mr-2" /> Unrefrigerate
             </ContextMenuItem>
           ) : (
-            <ContextMenuItem onClick={() => handleContextAction("Refrigerate", file)}>
+            <ContextMenuItem onClick={() => onContextAction("Refrigerate", file)}>
               <Snowflake className="h-4 w-4 mr-2" /> Refrigerate
             </ContextMenuItem>
           )}
           <ContextMenuSeparator />
           <ContextMenuItem
             className="text-destructive focus:text-destructive"
-            onClick={() => handleContextAction("Delete", file)}
+            onClick={() => onContextAction("Delete", file)}
           >
             <Trash2 className="h-4 w-4 mr-2" /> Delete
           </ContextMenuItem>
@@ -226,33 +232,45 @@ export function FileList({ files, folders, onFolderClick }: FileListProps) {
             <TableHead className="cursor-pointer" onClick={() => handleSort("name")}>
               <div className="flex items-center space-x-1">
                 <span>Name</span>
-                {sortField === "name" && (
-                  sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                )}
+                {sortField === "name" &&
+                  (sortDirection === "asc" ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  ))}
               </div>
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort("type")}>
               <div className="flex items-center space-x-1">
                 <span>Type</span>
-                {sortField === "type" && (
-                  sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                )}
+                {sortField === "type" &&
+                  (sortDirection === "asc" ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  ))}
               </div>
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort("size")}>
               <div className="flex items-center space-x-1">
                 <span>Size</span>
-                {sortField === "size" && (
-                  sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                )}
+                {sortField === "size" &&
+                  (sortDirection === "asc" ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  ))}
               </div>
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort("lastModified")}>
               <div className="flex items-center space-x-1">
                 <span>Modified</span>
-                {sortField === "lastModified" && (
-                  sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                )}
+                {sortField === "lastModified" &&
+                  (sortDirection === "asc" ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  ))}
               </div>
             </TableHead>
             <TableHead>Owner</TableHead>

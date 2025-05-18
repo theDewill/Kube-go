@@ -19,7 +19,9 @@ import {
   Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { GetStorageUsage } from "@/../wailsjs/go/kfiles/FileBrowser";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -29,6 +31,14 @@ interface SidebarProps {
 export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [StorageData, setStorageData] = useState();
+
+  useEffect(() => {
+    const x = async () => {
+      const storage_data = await GetStorageUsage();
+      setStorageData(storage_data);
+    };
+  }, []);
 
   const handleNavigation = (path: string) => {
     if (path === "Home") {

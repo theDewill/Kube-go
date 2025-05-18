@@ -1,4 +1,3 @@
-
 export interface File {
   id: string;
   name: string;
@@ -15,6 +14,7 @@ export interface File {
   isShared: boolean;
   sharedWith?: string[];
   tags?: string[];
+  isDistributed: boolean;
 }
 
 export interface Folder {

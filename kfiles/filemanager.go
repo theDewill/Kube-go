@@ -1,9 +1,14 @@
 package kfiles
 
 import (
+	"crypto/sha256"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"kube-go/kubenet"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,10 +18,23 @@ import (
 	"github.com/google/uuid"
 )
 
+type StorageInfo struct {
+	TotalUsed      int64   `json:"total_used"`      // Total bytes used
+	TotalUsedMB    float64 `json:"total_used_mb"`   // Total MB used
+	TotalUsedGB    float64 `json:"total_used_gb"`   // Total GB used
+	PercentageUsed float64 `json:"percentage_used"` // Percentage of 10GB used
+	TotalCapacity  int64   `json:"total_capacity"`  // Total capacity (10GB in bytes)
+	RemainingBytes int64   `json:"remaining_bytes"` // Remaining bytes available
+	RemainingGB    float64 `json:"remaining_gb"`    // Remaining GB available
+}
+
 // FileBrowser manages file operations within the Kube application
 type FileBrowser struct {
-	PlatformPath string // Base platform-specific path
-	KubeLoadsDir string // Dedicated kubeloads directory
+	PlatformPath string                // Base platform-specific path
+	KubeLoadsDir string                // Dedicated kubeloads directory
+	KubeRestsDir string                // Directory for storing chunks from other nodes
+	DbPath       string                // Path to the SQLite database
+	NodeRegistry *kubenet.NodeRegistry // Reference to the NodeRegistry
 }
 
 // FileType represents a file or folder in the file system
@@ -36,10 +54,72 @@ type FileType struct {
 	IsShared         bool      `json:"isShared"`
 	SharedWith       []string  `json:"sharedWith,omitempty"`
 	ItemCount        int       `json:"itemCount,omitempty"`
+	IsDistributed    bool      `json:"isDistributed,omitempty"`
+}
+
+// DIAGNOSTICS
+func (fb *FileBrowser) GetStorageUsage() (StorageInfo, error) {
+	const totalCapacityGB = 10
+	const totalCapacityBytes = totalCapacityGB * 1024 * 1024 * 1024 // 10GB in bytes
+
+	var totalUsed int64
+
+	// Walk through the kubeloads directory and calculate total size
+	err := filepath.Walk(fb.KubeLoadsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Log the error but don't stop the walk
+			log.Printf("Warning: Error accessing %s: %v", path, err)
+			return nil
+		}
+
+		// Only count regular files, not directories
+		if !info.IsDir() {
+			totalUsed += info.Size()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return StorageInfo{}, fmt.Errorf("failed to calculate storage usage: %w", err)
+	}
+
+	// Calculate percentage
+	percentageUsed := (float64(totalUsed) / float64(totalCapacityBytes)) * 100
+
+	// Calculate remaining space
+	remainingBytes := totalCapacityBytes - totalUsed
+	if remainingBytes < 0 {
+		remainingBytes = 0
+	}
+
+	// Create storage info
+	storageInfo := StorageInfo{
+		TotalUsed:      totalUsed,
+		TotalUsedMB:    float64(totalUsed) / (1024 * 1024),
+		TotalUsedGB:    float64(totalUsed) / (1024 * 1024 * 1024),
+		PercentageUsed: percentageUsed,
+		TotalCapacity:  totalCapacityBytes,
+		RemainingBytes: remainingBytes,
+		RemainingGB:    float64(remainingBytes) / (1024 * 1024 * 1024),
+	}
+
+	return storageInfo, nil
+}
+
+func (fb *FileBrowser) CheckStorageQuota(newFileSize int64) (bool, error) {
+	storageInfo, err := fb.GetStorageUsage()
+	if err != nil {
+		return false, err
+	}
+
+	// Check if adding the new file would exceed the 10GB limit
+	newTotal := storageInfo.TotalUsed + newFileSize
+	return newTotal <= storageInfo.TotalCapacity, nil
 }
 
 // LaunchFileBrowser creates a new FileBrowser instance with the platform-specific path
-func LaunchFileBrowser() (*FileBrowser, error) {
+func LaunchFileBrowser(nodeRegistry *kubenet.NodeRegistry) (*FileBrowser, error) {
 	platformPath, err := GetPlatformSpecificPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get platform-specific path: %w", err)
@@ -50,14 +130,67 @@ func LaunchFileBrowser() (*FileBrowser, error) {
 	if err := os.MkdirAll(kubeLoadsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create kubeloads directory: %w", err)
 	}
+	kubeRestsDir := filepath.Join(platformPath, "kuberests")
+	if err := os.MkdirAll(kubeRestsDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create kuberests directory: %w", err)
+	}
+	dbPath := filepath.Join(platformPath, "fileidx.sqlite")
 
 	fb := &FileBrowser{
 		PlatformPath: platformPath,
 		KubeLoadsDir: kubeLoadsDir,
+		KubeRestsDir: kubeRestsDir,
+		DbPath:       dbPath,
+		NodeRegistry: nodeRegistry,
 	}
 	print("FileBrowser Created")
+	if err := fb.initializeDatabase(); err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	// Initialize the NodeRegistry's chunk transfer services
+	if err := nodeRegistry.InitializeChunkDatabase(dbPath); err != nil {
+		return nil, fmt.Errorf("failed to initialize chunk database: %w", err)
+	}
+
+	// Start the chunk transfer service - CHECKHERE FOR CTX
+	ctx := nodeRegistry.GetContext() // Assuming you add a GetContext() method to NodeRegistry
+	if err := nodeRegistry.StartChunkTransferService(ctx, kubeRestsDir, dbPath); err != nil {
+		return nil, fmt.Errorf("failed to start chunk transfer service: %w", err)
+	}
 
 	return fb, nil
+}
+
+// initializeDatabase sets up the SQLite database for file management
+func (fb *FileBrowser) initializeDatabase() error {
+	db, err := sql.Open("sqlite3", fb.DbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Create tables for file management
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS files (
+			file_id TEXT PRIMARY KEY,
+			file_name TEXT NOT NULL,
+			file_path TEXT NOT NULL,
+			file_size INTEGER NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL,
+			is_distributed BOOLEAN NOT NULL DEFAULT 0,
+			total_chunks INTEGER NOT NULL DEFAULT 1
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_files_path ON files(file_path);
+		CREATE INDEX IF NOT EXISTS idx_files_distributed ON files(is_distributed);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create files table: %w", err)
+	}
+
+	return nil
 }
 
 // getPlatformSpecificPath returns the appropriate directory path based on the OS
@@ -117,6 +250,107 @@ func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 	return filepath.Join(fb.KubeLoadsDir, relativePath)
 }
 
+// UploadFile saves an uploaded file and optionally distributes it across nodes
+func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileData []byte, distribute bool) error {
+	if !isValidName(fileName) {
+		return errors.New("invalid file name")
+	}
+
+	// Create a unique file ID
+	fileID := uuid.New().String()
+
+	// Calculate file hash for additional integrity verification
+	hasher := sha256.New()
+	hasher.Write(fileData)
+	//fileHash := hex.EncodeToString(hasher.Sum(nil))
+
+	// Create the target path in kubeloads
+	relativePath := strings.TrimPrefix(directoryPath, "/")
+	targetDir := filepath.Join(fb.KubeLoadsDir, relativePath)
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// Use the fileID as filename to avoid collisions and for security
+	storageFileName := fmt.Sprintf("%s-%s", fileID, fileName)
+	targetPath := filepath.Join(targetDir, storageFileName)
+
+	// Store file in database
+	db, err := sql.Open("sqlite3", fb.DbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Begin transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Will be committed on success
+
+	print("INSERTING TO DB")
+	// Insert file record
+	now := time.Now()
+	_, err = tx.Exec(
+		"INSERT INTO files (file_id, file_name, file_path, file_size, created_at, updated_at, is_distributed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		fileID, fileName, filepath.Join(relativePath, storageFileName), len(fileData), now, now, distribute,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert file record: %w", err)
+	}
+
+	// Write the file to disk
+	if err := ioutil.WriteFile(targetPath, fileData, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// If distribution is requested, chunk and distribute the file
+	if distribute {
+		// Count expected chunks
+		chunkSize := 1024 * 1024 // 1MB per chunk
+		totalChunks := (len(fileData) + chunkSize - 1) / chunkSize
+
+		// Update total_chunks in the database
+		_, err = tx.Exec(
+			"UPDATE files SET total_chunks = ? WHERE file_id = ?",
+			totalChunks, fileID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update total chunks: %w", err)
+		}
+
+		// Commit the transaction before distributing chunks
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+
+		// Distribute file chunks
+		if err := fb.NodeRegistry.DistributeFileChunks(
+			fileID,
+			targetPath,
+			fileName,
+			fb.KubeRestsDir,
+			fb.DbPath,
+		); err != nil {
+			// File is already saved, so don't fail completely
+			log.Printf("Warning: Failed to distribute file %s: %v", fileID, err)
+			return nil
+		}
+
+		log.Printf("File %s successfully distributed across nodes", fileID)
+	} else {
+		// Commit the transaction
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // ListDirectory lists files and folders in the specified directory
 func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 	dirPath := fb.GetCurrentPath(path)
@@ -139,6 +373,34 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
+	// Open database to get distributed status
+	db, err := sql.Open("sqlite3", fb.DbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Prepare a map to store distributed status by filename
+	distributedFiles := make(map[string]bool)
+
+	// Query all files from this directory
+	rows, err := db.Query("SELECT file_path, is_distributed FROM files")
+	if err != nil {
+		log.Printf("Warning: Failed to query distributed files: %v", err)
+	} else {
+		defer rows.Close()
+
+		for rows.Next() {
+			var filePath string
+			var isDistributed bool
+			if err := rows.Scan(&filePath, &isDistributed); err != nil {
+				log.Printf("Warning: Failed to scan row: %v", err)
+				continue
+			}
+			distributedFiles[filePath] = isDistributed
+		}
+	}
+
 	files := make([]FileType, 0, len(entries))
 
 	for _, entry := range entries {
@@ -157,10 +419,20 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 		// Convert path separators to forward slashes for consistent API
 		relativePath = "/" + strings.ReplaceAll(relativePath, string(os.PathSeparator), "/")
 
+		// Extract the original filename (remove fileID prefix if present)
+		displayName := entry.Name()
+		if strings.Contains(displayName, "-") && !entry.IsDir() {
+			// Try to extract the original filename
+			parts := strings.SplitN(displayName, "-", 2)
+			if len(parts) == 2 && isValidUUID(parts[0]) {
+				displayName = parts[1]
+			}
+		}
+
 		// Create a FileType object
 		file := FileType{
 			ID:               uuid.New().String(),
-			Name:             entry.Name(),
+			Name:             displayName,
 			Path:             relativePath,
 			LastModifiedDate: info.ModTime(),
 			LastModified:     formatLastModified(info.ModTime()),
@@ -175,8 +447,12 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 			file.Type = "file"
 			file.SizeInBytes = info.Size()
 			file.Size = formatSize(info.Size())
-			file.Extension = getFileExtension(entry.Name())
+			file.Extension = getFileExtension(displayName)
 			file.IsRefrigerated = isRefrigerated(entryPath)
+
+			// Check if this file is distributed
+			file.IsDistributed = distributedFiles[relativePath]
+
 			if file.IsRefrigerated {
 				file.CompressionRatio = 0.5 // Placeholder - would need actual implementation
 			}
@@ -186,6 +462,110 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 	}
 
 	return files, nil
+}
+
+// DownloadFile downloads a file, reassembling it if it's distributed
+func (fb *FileBrowser) DownloadFile(path string) ([]byte, error) {
+	// First, check if the file exists directly
+	filePath := fb.GetCurrentPath(path)
+
+	// Get just the filename
+	fileName := filepath.Base(path)
+
+	// Check if it's a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+
+	if isDistributed {
+		// Create a temporary file for reassembly
+		tempFile := filepath.Join(os.TempDir(), fileName)
+
+		// Reassemble the file
+		if err := fb.NodeRegistry.ReassembleFile(fileID, tempFile, fb.KubeRestsDir, fb.DbPath); err != nil {
+			return nil, fmt.Errorf("failed to reassemble file: %w", err)
+		}
+
+		// Read the reassembled file
+		data, err := ioutil.ReadFile(tempFile)
+
+		// Clean up temp file
+		os.Remove(tempFile)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to read reassembled file: %w", err)
+		}
+
+		return data, nil
+	}
+
+	// It's not distributed, just read it directly
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return data, nil
+}
+
+// isDistributedFile checks if a file is distributed and returns its fileID
+func (fb *FileBrowser) isDistributedFile(path string) (bool, string, error) {
+	// Normalize path
+	relativePath := strings.TrimPrefix(path, "/")
+	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
+
+	// Open database
+	db, err := sql.Open("sqlite3", fb.DbPath)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Query for the file
+	var isDistributed bool
+	var fileID string
+
+	// Try exact path first
+	err = db.QueryRow(
+		"SELECT is_distributed, file_id FROM files WHERE file_path = ?",
+		relativePath,
+	).Scan(&isDistributed, &fileID)
+
+	if err == sql.ErrNoRows {
+		// Try partial match (file might be in the path)
+		rows, err := db.Query(
+			"SELECT is_distributed, file_id, file_path FROM files",
+		)
+		if err != nil {
+			return false, "", fmt.Errorf("failed to query files: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var id string
+			var isDist bool
+			var filePath string
+			if err := rows.Scan(&isDist, &id, &filePath); err != nil {
+				continue
+			}
+
+			// Check if this file path ends with our path
+			if strings.HasSuffix(filePath, relativePath) || strings.HasSuffix(relativePath, filePath) {
+				isDistributed = isDist
+				fileID = id
+				break
+			}
+		}
+
+		if fileID == "" {
+			return false, "", nil // File not found in database
+		}
+	} else if err != nil {
+		return false, "", fmt.Errorf("failed to query file: %w", err)
+	}
+
+	return isDistributed, fileID, nil
 }
 
 // CreateFolder creates a new folder at the specified path
@@ -216,6 +596,31 @@ func (fb *FileBrowser) RenameItem(path string, newName string) error {
 		return fmt.Errorf("an item with the name %s already exists", newName)
 	}
 
+	// Check if this is a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+
+	// If it's distributed, update the database
+	if isDistributed {
+		db, err := sql.Open("sqlite3", fb.DbPath)
+		if err != nil {
+			return fmt.Errorf("failed to open database: %w", err)
+		}
+		defer db.Close()
+
+		// Update the file_name in the database
+		_, err = db.Exec(
+			"UPDATE files SET file_name = ? WHERE file_id = ?",
+			newName, fileID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update file name in database: %w", err)
+		}
+	}
+
+	// Rename the file on disk
 	return os.Rename(itemPath, newPath)
 }
 
@@ -228,192 +633,46 @@ func (fb *FileBrowser) DeleteItem(path string) error {
 		return fmt.Errorf("failed to access item: %w", err)
 	}
 
+	// Check if this is a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+
+	// If it's distributed, delete the chunks and database entries
+	if isDistributed {
+		db, err := sql.Open("sqlite3", fb.DbPath)
+		if err != nil {
+			return fmt.Errorf("failed to open database: %w", err)
+		}
+		defer db.Close()
+
+		// Delete all chunks associated with this file
+		// Note: This doesn't delete chunks on other nodes, they'll be cleaned up by expiration
+		_, err = db.Exec(
+			"DELETE FROM chunks WHERE file_id = ?",
+			fileID,
+		)
+		if err != nil {
+			log.Printf("Warning: Failed to delete chunk records: %v", err)
+		}
+
+		// Delete the file entry
+		_, err = db.Exec(
+			"DELETE FROM files WHERE file_id = ?",
+			fileID,
+		)
+		if err != nil {
+			log.Printf("Warning: Failed to delete file record: %v", err)
+		}
+	}
+
+	// Delete the file or directory
 	if info.IsDir() {
 		return os.RemoveAll(itemPath)
 	}
 
 	return os.Remove(itemPath)
-}
-
-// UploadFile saves an uploaded file to the specified directory
-func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileData []byte) error {
-	if !isValidName(fileName) {
-		return errors.New("invalid file name")
-	}
-
-	targetPath := filepath.Join(fb.GetCurrentPath(directoryPath), fileName)
-
-	// Check if file already exists
-	if _, err := os.Stat(targetPath); err == nil {
-		return fmt.Errorf("file already exists: %s", fileName)
-	}
-
-	return os.WriteFile(targetPath, fileData, 0644)
-}
-
-// DownloadFile reads a file and returns its contents as bytes
-func (fb *FileBrowser) DownloadFile(path string) ([]byte, error) {
-	filePath := fb.GetCurrentPath(path)
-
-	_, err := os.Stat(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to access file: %w", err)
-	}
-
-	return os.ReadFile(filePath)
-}
-
-// CopyItem copies a file or folder to another location
-func (fb *FileBrowser) CopyItem(srcPath string, destPath string) error {
-	sourcePath := fb.GetCurrentPath(srcPath)
-	destFullPath := fb.GetCurrentPath(destPath)
-
-	// Check if source exists
-	sourceInfo, err := os.Stat(sourcePath)
-	if err != nil {
-		return fmt.Errorf("source does not exist: %w", err)
-	}
-
-	// Get the source base name
-	baseName := filepath.Base(sourcePath)
-	targetPath := filepath.Join(destFullPath, baseName)
-
-	// Check if the destination already exists
-	if _, err := os.Stat(targetPath); err == nil {
-		return fmt.Errorf("destination already exists: %s", destPath)
-	}
-
-	// Copy file or directory
-	if sourceInfo.IsDir() {
-		return copyDir(sourcePath, targetPath)
-	}
-
-	return copyFile(sourcePath, targetPath)
-}
-
-// MoveItem moves a file or folder to another location
-func (fb *FileBrowser) MoveItem(srcPath string, destPath string) error {
-	sourcePath := fb.GetCurrentPath(srcPath)
-	destFullPath := fb.GetCurrentPath(destPath)
-
-	// Check if source exists
-	_, err := os.Stat(sourcePath)
-	if err != nil {
-		return fmt.Errorf("source does not exist: %w", err)
-	}
-
-	// Get the source base name
-	baseName := filepath.Base(sourcePath)
-	targetPath := filepath.Join(destFullPath, baseName)
-
-	// Check if the destination already exists
-	if _, err := os.Stat(targetPath); err == nil {
-		return fmt.Errorf("destination already exists: %s", destPath)
-	}
-
-	// Move the item (rename works across different directories)
-	return os.Rename(sourcePath, targetPath)
-}
-
-// RefrigerateFile compresses a file to save space (placeholder implementation)
-func (fb *FileBrowser) RefrigerateFile(path string) error {
-	filePath := fb.GetCurrentPath(path)
-
-	// Check if file exists
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return fmt.Errorf("file does not exist: %w", err)
-	}
-
-	if fileInfo.IsDir() {
-		return errors.New("cannot refrigerate a directory")
-	}
-
-	// In a real implementation, you would compress the file here
-	// For now, just add a .ref extension to simulate compression
-	refrigeratedPath := filePath + ".ref"
-
-	// Create an empty refrigerated file (placeholder)
-	f, err := os.Create(refrigeratedPath)
-	if err != nil {
-		return fmt.Errorf("failed to create refrigerated file: %w", err)
-	}
-	defer f.Close()
-
-	// Mark the original file as refrigerated (in a real implementation)
-	// For now, we'll just remove the original file
-	return os.Remove(filePath)
-}
-
-// UnrefrigerateFile decompresses a refrigerated file (placeholder implementation)
-func (fb *FileBrowser) UnrefrigerateFile(path string) error {
-	filePath := fb.GetCurrentPath(path)
-
-	// In a real implementation, you would check if the file is compressed
-	// and decompress it here
-
-	// For now, just remove the .ref extension if it exists
-	if strings.HasSuffix(filePath, ".ref") {
-		originalPath := strings.TrimSuffix(filePath, ".ref")
-
-		// Create an empty original file (placeholder)
-		f, err := os.Create(originalPath)
-		if err != nil {
-			return fmt.Errorf("failed to create unrefrigerated file: %w", err)
-		}
-		defer f.Close()
-
-		// Remove the refrigerated file
-		return os.Remove(filePath)
-	}
-
-	return errors.New("file is not refrigerated")
-}
-
-// GetFileInfo returns detailed information about a file or folder
-func (fb *FileBrowser) GetFileInfo(path string) (FileType, error) {
-	itemPath := fb.GetCurrentPath(path)
-
-	info, err := os.Stat(itemPath)
-	if err != nil {
-		return FileType{}, fmt.Errorf("failed to access item: %w", err)
-	}
-
-	// Calculate relative path from kubeloads directory
-	relativePath, err := filepath.Rel(fb.KubeLoadsDir, itemPath)
-	if err != nil {
-		return FileType{}, fmt.Errorf("failed to calculate relative path: %w", err)
-	}
-
-	// Convert path separators to forward slashes for consistent API
-	relativePath = "/" + strings.ReplaceAll(relativePath, string(os.PathSeparator), "/")
-
-	// Create a FileType object
-	file := FileType{
-		ID:               uuid.New().String(),
-		Name:             filepath.Base(itemPath),
-		Path:             relativePath,
-		LastModifiedDate: info.ModTime(),
-		LastModified:     formatLastModified(info.ModTime()),
-		Owner:            "You", // Default owner
-		IsShared:         false,
-	}
-
-	if info.IsDir() {
-		file.Type = "folder"
-		file.ItemCount = countItems(itemPath)
-	} else {
-		file.Type = "file"
-		file.SizeInBytes = info.Size()
-		file.Size = formatSize(info.Size())
-		file.Extension = getFileExtension(info.Name())
-		file.IsRefrigerated = isRefrigerated(itemPath)
-		if file.IsRefrigerated {
-			file.CompressionRatio = 0.5 // Placeholder - would need actual implementation
-		}
-	}
-
-	return file, nil
 }
 
 // Helper functions
@@ -442,6 +701,12 @@ func isValidName(name string) bool {
 	}
 
 	return true
+}
+
+// isValidUUID checks if a string is a valid UUID
+func isValidUUID(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }
 
 // getFileExtension returns the file extension without the dot
@@ -518,6 +783,214 @@ func isRefrigerated(path string) bool {
 	return strings.HasSuffix(path, ".ref")
 }
 
+// CopyItem copies a file or folder to another location
+
+// CopyItem copies a file or folder to another location
+func (fb *FileBrowser) CopyItem(srcPath string, destPath string) error {
+	sourcePath := fb.GetCurrentPath(srcPath)
+	destFullPath := fb.GetCurrentPath(destPath)
+
+	// Check if source exists
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("source does not exist: %w", err)
+	}
+
+	// Get the source base name
+	baseName := filepath.Base(sourcePath)
+	targetPath := filepath.Join(destFullPath, baseName)
+
+	// Check if the destination already exists
+	if _, err := os.Stat(targetPath); err == nil {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	// Check if this is a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+
+	// Copy file or directory
+	if sourceInfo.IsDir() {
+		return copyDir(sourcePath, targetPath)
+	}
+
+	// Copy regular file
+	if err := copyFile(sourcePath, targetPath); err != nil {
+		return err
+	}
+
+	// If it's a distributed file, copy the database entry
+	if isDistributed {
+		// Generate new file ID for the copy
+		newFileID := uuid.New().String()
+
+		db, err := sql.Open("sqlite3", fb.DbPath)
+		if err != nil {
+			return fmt.Errorf("failed to open database: %w", err)
+		}
+		defer db.Close()
+
+		// Get original file info
+		var fileName string
+		var fileSize int64
+		var createdAt, updatedAt time.Time
+		var totalChunks int
+
+		err = db.QueryRow(
+			"SELECT file_name, file_size, created_at, updated_at, total_chunks FROM files WHERE file_id = ?",
+			fileID,
+		).Scan(&fileName, &fileSize, &createdAt, &updatedAt, &totalChunks)
+		if err != nil {
+			return fmt.Errorf("failed to get file info: %w", err)
+		}
+
+		// Calculate new relative path
+		newRelativePath, err := filepath.Rel(fb.KubeLoadsDir, targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate relative path: %w", err)
+		}
+
+		// Insert new file record
+		now := time.Now()
+		_, err = db.Exec(
+			"INSERT INTO files (file_id, file_name, file_path, file_size, created_at, updated_at, is_distributed, total_chunks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			newFileID, fileName, newRelativePath, fileSize, now, now, true, totalChunks,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert copy file record: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// MoveItem moves a file or folder to another location
+func (fb *FileBrowser) MoveItem(srcPath string, destPath string) error {
+	sourcePath := fb.GetCurrentPath(srcPath)
+	destFullPath := fb.GetCurrentPath(destPath)
+
+	// Check if source exists
+	_, err := os.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("source does not exist: %w", err)
+	}
+
+	// Get the source base name
+	baseName := filepath.Base(sourcePath)
+	targetPath := filepath.Join(destFullPath, baseName)
+
+	// Check if the destination already exists
+	if _, err := os.Stat(targetPath); err == nil {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	// Check if this is a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+
+	// Move the item (rename works across different directories on the same filesystem)
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return fmt.Errorf("failed to move item: %w", err)
+	}
+
+	// If it's a distributed file, update the database entry
+	if isDistributed {
+		db, err := sql.Open("sqlite3", fb.DbPath)
+		if err != nil {
+			return fmt.Errorf("failed to open database: %w", err)
+		}
+		defer db.Close()
+
+		// Calculate new relative path
+		newRelativePath, err := filepath.Rel(fb.KubeLoadsDir, targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate relative path: %w", err)
+		}
+
+		// Update the file_path in the database
+		_, err = db.Exec(
+			"UPDATE files SET file_path = ?, updated_at = ? WHERE file_id = ?",
+			newRelativePath, time.Now(), fileID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update file path in database: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// GetFileInfo returns detailed information about a file or folder
+func (fb *FileBrowser) GetFileInfo(path string) (FileType, error) {
+	itemPath := fb.GetCurrentPath(path)
+
+	info, err := os.Stat(itemPath)
+	if err != nil {
+		return FileType{}, fmt.Errorf("failed to access item: %w", err)
+	}
+
+	// Calculate relative path from kubeloads directory
+	relativePath, err := filepath.Rel(fb.KubeLoadsDir, itemPath)
+	if err != nil {
+		return FileType{}, fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+
+	// Convert path separators to forward slashes for consistent API
+	relativePath = "/" + strings.ReplaceAll(relativePath, string(os.PathSeparator), "/")
+
+	// Extract the original filename (remove fileID prefix if present)
+	displayName := filepath.Base(itemPath)
+	if strings.Contains(displayName, "-") && !info.IsDir() {
+		// Try to extract the original filename
+		parts := strings.SplitN(displayName, "-", 2)
+		if len(parts) == 2 && isValidUUID(parts[0]) {
+			displayName = parts[1]
+		}
+	}
+
+	// Create a FileType object
+	file := FileType{
+		ID:               uuid.New().String(),
+		Name:             displayName,
+		Path:             relativePath,
+		LastModifiedDate: info.ModTime(),
+		LastModified:     formatLastModified(info.ModTime()),
+		Owner:            "You", // Default owner
+		IsShared:         false,
+	}
+
+	if info.IsDir() {
+		file.Type = "folder"
+		file.ItemCount = countItems(itemPath)
+	} else {
+		file.Type = "file"
+		file.SizeInBytes = info.Size()
+		file.Size = formatSize(info.Size())
+		file.Extension = getFileExtension(displayName)
+		file.IsRefrigerated = isRefrigerated(itemPath)
+
+		// Check if this file is distributed
+		isDistributed, _, err := fb.isDistributedFile(path)
+		if err != nil {
+			log.Printf("Warning: Failed to check distributed status: %v", err)
+		} else {
+			file.IsDistributed = isDistributed
+		}
+
+		if file.IsRefrigerated {
+			file.CompressionRatio = 0.5 // Placeholder - would need actual implementation
+		}
+	}
+
+	return file, nil
+}
+
+// Helper functions for copying files and directories
+
 // copyFile copies a single file from src to dst
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
@@ -583,6 +1056,63 @@ func copyDir(src, dst string) error {
 
 	return nil
 }
+
+// RefrigerateFile compresses a file to save space (placeholder implementation)
+func (fb *FileBrowser) RefrigerateFile(path string) error {
+	filePath := fb.GetCurrentPath(path)
+
+	// Check if file exists
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("file does not exist: %w", err)
+	}
+
+	if fileInfo.IsDir() {
+		return errors.New("cannot refrigerate a directory")
+	}
+
+	// In a real implementation, you would compress the file here
+	// For now, just add a .ref extension to simulate compression
+	refrigeratedPath := filePath + ".ref"
+
+	// Create an empty refrigerated file (placeholder)
+	f, err := os.Create(refrigeratedPath)
+	if err != nil {
+		return fmt.Errorf("failed to create refrigerated file: %w", err)
+	}
+	defer f.Close()
+
+	// Mark the original file as refrigerated (in a real implementation)
+	// For now, we'll just remove the original file
+	return os.Remove(filePath)
+}
+
+// UnrefrigerateFile decompresses a refrigerated file (placeholder implementation)
+func (fb *FileBrowser) UnrefrigerateFile(path string) error {
+	filePath := fb.GetCurrentPath(path)
+
+	// In a real implementation, you would check if the file is compressed
+	// and decompress it here
+
+	// For now, just remove the .ref extension if it exists
+	if strings.HasSuffix(filePath, ".ref") {
+		originalPath := strings.TrimSuffix(filePath, ".ref")
+
+		// Create an empty original file (placeholder)
+		f, err := os.Create(originalPath)
+		if err != nil {
+			return fmt.Errorf("failed to create unrefrigerated file: %w", err)
+		}
+		defer f.Close()
+
+		// Remove the refrigerated file
+		return os.Remove(filePath)
+	}
+
+	return errors.New("file is not refrigerated")
+}
+
+// Helper functions
 
 //MYINITIAL EXAMPLE
 // package kfiles
