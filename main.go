@@ -32,14 +32,8 @@ func main() {
 	}
 	fmt.Printf("File Browser initialized. KubeLoads directory: %s\n", fileBrowser.KubeLoadsDir)
 
-	// facial recognition system DIR
-	// appDir, apperr := kfiles.GetPlatformSpecificPath()
-	// if apperr != nil {
-	// 	log.Printf("Err getting platform specific path [kfile util]: %v", apperr)
-	// }
 	appDir := "/Users/nominsendinu/DEWILL/CODE/Projects/kube-go"
-
-	dbPath := filepath.Join(appDir, "db")
+	dbPath := filepath.Join(appDir, "db/fileidx.sqlite") //<-TOENV
 	modelsPath := filepath.Join(appDir, "models")
 
 	facialSystem, fsErr := security.NewFacialSystem(dbPath, modelsPath)

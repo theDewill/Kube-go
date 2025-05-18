@@ -6,6 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/wailsapp/wails/v2 v2.10.1
 	gocv.io/x/gocv v0.41.0
 )
@@ -23,7 +24,6 @@ require (
 	github.com/leaanthony/u v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-sqlite3 v1.14.28 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
