@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   Settings as SettingsIcon,
@@ -12,6 +12,9 @@ import {
   ExternalLink,
   Zap,
   Globe,
+  Mail,
+  Camera,
+  Users2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { FileBrowserAPI } from "@/lib/file-api";
+import { TrainNewUser } from "@/../wailsjs/go/security/FacialSystem";
 
 interface AppSettings {
   gemini_api_key: string;
@@ -50,6 +54,10 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [cameraActive, setCameraActive] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     ollama: false,
     gemini: false,
@@ -143,6 +151,40 @@ export default function Settings() {
         gemini: false,
         checking: false,
       });
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setCameraActive(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!registerEmail) {
+      toast.error("Please enter an email address for registration");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Call the Go method for user registration with facial training
+      const userId = await TrainNewUser(registerEmail);
+
+      setIsLoading(false);
+      toast.success("Registration successful! You can now login with facial recognition.");
+      stopCamera();
+      // Switch to facial login tab
+      document.querySelector('[value="facial"]').click();
+    } catch (error) {
+      setIsLoading(false);
+      toast.error(`Registration failed: ${error.message || "Could not register face"}`);
     }
   };
 
@@ -280,7 +322,7 @@ export default function Settings() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center space-x-2">
                   <Zap className="h-5 w-5 text-blue-500" />
-                  <span>Ollama Settings</span>
+                  <span>Local Settings (LAN)</span>
                 </CardTitle>
                 {getConnectionStatusBadge(
                   connectionStatus.ollama,
@@ -388,6 +430,68 @@ export default function Settings() {
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
                   Get Gemini API Key
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex flex-col">
+                  <div className="flex items-center space-x-2">
+                    <Users2 className="h-5 w-5 text-yellow-500" />
+                    <p className="text-2xl">Kube Transfer</p>
+                  </div>
+                  <p className="text-sm mt-2 text-neutral-500">
+                    Transfer the kube space of this node instance to a new user
+                  </p>
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="registerEmail">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="registerEmail"
+                      type="email"
+                      placeholder="name@example.com"
+                      className="pl-10"
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="w-36 h-36 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
+                  {cameraActive ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="min-w-full min-h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full w-full">
+                      <Camera className="h-12 w-12 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  We'll take multiple samples of your face to train the recognition system
+                </p>
+                <Button
+                  onClick={handleRegister}
+                  className="w-full bg-blue-500 hover:bg-blue-600"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Registering..." : "Register Face"}
                 </Button>
               </div>
             </CardContent>
