@@ -5,12 +5,10 @@ export function Close():Promise<void>;
 
 export function GetCurrentUser():Promise<string>;
 
-export function GetRegisteredUserCount():Promise<number>;
-
 export function IsInitialized():Promise<boolean>;
 
-export function LoginUser():Promise<string>;
+export function LoginUserWithFrame(arg1:string,arg2:string):Promise<string>;
 
 export function Logout():Promise<void>;
 
-export function TrainNewUser(arg1:string):Promise<string>;
+export function TrainNewUserWithFrames(arg1:string,arg2:Array<string>):Promise<string>;

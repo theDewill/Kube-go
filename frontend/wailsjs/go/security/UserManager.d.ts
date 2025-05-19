@@ -10,7 +10,7 @@ export function IsUserAdmin(arg1:number):Promise<boolean>;
 
 export function LoginWithCredentials(arg1:string,arg2:string):Promise<security.AuthResponse>;
 
-export function LoginWithFacialAuth():Promise<security.AuthResponse>;
+export function LoginWithFacialAuth(arg1:string):Promise<security.AuthResponse>;
 
 export function Logout(arg1:string):Promise<void>;
 

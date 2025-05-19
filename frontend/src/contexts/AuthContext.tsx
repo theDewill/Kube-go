@@ -33,6 +33,7 @@ interface RegistrationRequest {
   email: string;
   password: string;
   enable_facial_auth: boolean;
+  face_frames: string[];
 }
 
 interface AuthContextType {
@@ -41,8 +42,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  loginWithFace: () => Promise<boolean>;
-  register: (email: string, password: string, enableFacialAuth: boolean) => Promise<boolean>;
+  loginWithFace: (frame: string) => Promise<boolean>;
+  register: (
+    email: string,
+    password: string,
+    faceframes: string[],
+    enableFacialAuth: boolean,
+  ) => Promise<boolean>;
   logout: () => Promise<void>;
   validateSession: () => Promise<boolean>;
 }
@@ -62,20 +68,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Check for existing session on mount
   useEffect(() => {
-    const savedSessionId = localStorage.getItem("session_id");
-    if (savedSessionId) {
-      setSessionId(savedSessionId);
-      validateSession();
-    } else {
-      setIsLoading(false);
-    }
+    const checkSession = async () => {
+      try {
+        const storedSessionId = localStorage.getItem("session_id");
+        if (storedSessionId) {
+          setSessionId(storedSessionId);
+          // Important: Actually validate the session and get user data
+          const isValid = await validateSession();
+          if (!isValid) {
+            // If validation fails, clear everything
+            setUser(null);
+            setSessionId(null);
+            localStorage.removeItem("session_id");
+          }
+        }
+      } catch (error) {
+        console.error("Session check failed:", error);
+        localStorage.removeItem("session_id");
+        setUser(null);
+        setSessionId(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
   }, []);
 
   // Validate current session
   const validateSession = async (): Promise<boolean> => {
     const currentSessionId = sessionId || localStorage.getItem("session_id");
     if (!currentSessionId) {
-      setIsLoading(false);
       return false;
     }
 
@@ -84,7 +107,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(userData);
       setSessionId(currentSessionId);
       localStorage.setItem("session_id", currentSessionId);
-      setIsLoading(false);
       return true;
     } catch (error) {
       console.error("Session validation failed:", error);
@@ -92,7 +114,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       setSessionId(null);
       localStorage.removeItem("session_id");
-      setIsLoading(false);
       return false;
     }
   };
@@ -121,10 +142,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Login with facial recognition
-  const loginWithFace = async (): Promise<boolean> => {
+  const loginWithFace = async (frameData: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const response: AuthResponse = await LoginWithFacialAuth();
+      const response: AuthResponse = await LoginWithFacialAuth(frameData);
 
       if (response.success && response.user && response.session_id) {
         setUser(response.user);
@@ -148,6 +169,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     email: string,
     password: string,
     enableFacialAuth: boolean,
+    faceframes: string[],
   ): Promise<boolean> => {
     setIsLoading(true);
     try {
@@ -155,6 +177,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email,
         password,
         enable_facial_auth: enableFacialAuth,
+        face_frames: faceframes,
       };
 
       const response: AuthResponse = await RegisterUser(registrationData);
@@ -221,19 +244,28 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, fallback }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, sessionId, isLoading } = useAuth();
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary">
+          Loading..
+        </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <>{fallback}</>;
+  if (user && sessionId) {
+    return <>{children}</>;
   }
 
-  return <>{children}</>;
+  // If not authenticated, show login form
+  return <>{fallback}</>;
+
+  // if (!isAuthenticated) {
+  //   return <>{fallback}</>;
+  // }
+
+  // return <>{children}</>;
 };

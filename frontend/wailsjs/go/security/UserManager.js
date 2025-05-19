@@ -18,8 +18,8 @@ export function LoginWithCredentials(arg1, arg2) {
   return window['go']['security']['UserManager']['LoginWithCredentials'](arg1, arg2);
 }
 
-export function LoginWithFacialAuth() {
-  return window['go']['security']['UserManager']['LoginWithFacialAuth']();
+export function LoginWithFacialAuth(arg1) {
+  return window['go']['security']['UserManager']['LoginWithFacialAuth'](arg1);
 }
 
 export function Logout(arg1) {

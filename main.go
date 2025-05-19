@@ -47,12 +47,12 @@ func main() {
 		fmt.Printf("User data stored in SQLite database: %s\n", dbPath)
 
 		// Get the number of registered users
-		userCount, err := facialSystem.GetRegisteredUserCount()
-		if err != nil {
-			log.Printf("Warning: Failed to get registered user count: %v", err)
-		} else {
-			fmt.Printf("Number of registered users: %d\n", userCount)
-		}
+		// userCount, err := facialSystem.GetRegisteredUserCount()
+		// if err != nil {
+		// 	log.Printf("Warning: Failed to get registered user count: %v", err)
+		// } else {
+		// 	fmt.Printf("Number of registered users: %d\n", userCount)
+		// }
 	}
 
 	userManager, umErr := security.NewUserManager(dbPath, facialSystem)

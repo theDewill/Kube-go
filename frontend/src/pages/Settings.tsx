@@ -25,7 +25,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { FileBrowserAPI } from "@/lib/file-api";
-import { TrainNewUser } from "@/../wailsjs/go/security/FacialSystem";
 import UserRegistration from "@/components/auth/UserRegister";
 
 interface AppSettings {
@@ -163,29 +162,6 @@ export default function Settings() {
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!registerEmail) {
-      toast.error("Please enter an email address for registration");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Call the Go method for user registration with facial training
-      const userId = await TrainNewUser(registerEmail);
-
-      setIsLoading(false);
-      toast.success("Registration successful! You can now login with facial recognition.");
-      stopCamera();
-      // Switch to facial login tab
-      document.querySelector('[value="facial"]').click();
-    } catch (error) {
-      setIsLoading(false);
-      toast.error(`Registration failed: ${error.message || "Could not register face"}`);
     }
   };
 

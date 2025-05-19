@@ -238,6 +238,30 @@ export default function UserRegistration() {
     }
   }, []);
 
+  // Add capturing state
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureCount, setCaptureCount] = useState(0);
+
+  const captureFrame = useCallback(() => {
+    if (!videoRef.current || cameraStatus !== "active") {
+      return null;
+    }
+
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.drawImage(video, 0, 0);
+
+    // Convert to base64
+    const dataURL = canvas.toDataURL("image/jpeg", 0.8);
+    return dataURL.split(",")[1]; // Remove data:image/jpeg;base64, prefix
+  }, [cameraStatus]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -267,7 +291,52 @@ export default function UserRegistration() {
     }
 
     try {
-      await register(email, password, enableFacialAuth);
+      // If facial auth is enabled, capture frames for training
+      let faceFrames: string[] = [];
+      if (enableFacialAuth && cameraStatus === "active") {
+        setIsCapturing(true);
+        setCaptureCount(0);
+
+        toast.info("Starting facial data capture...");
+
+        // Capture 5 frames with delays
+        for (let i = 0; i < 5; i++) {
+          setCaptureCount(i + 1);
+          toast.info(`Capturing frame ${i + 1}/5 - Please look at the camera`);
+
+          // Wait a moment for user to adjust
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          const frame = captureFrame();
+          if (frame) {
+            faceFrames.push(frame);
+            // Visual feedback - flash effect
+            if (videoRef.current) {
+              videoRef.current.style.filter = "brightness(1.5)";
+              setTimeout(() => {
+                if (videoRef.current) {
+                  videoRef.current.style.filter = "none";
+                }
+              }, 200);
+            }
+          }
+
+          // Delay between captures
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
+        setIsCapturing(false);
+        setCaptureCount(0);
+
+        if (faceFrames.length === 0) {
+          toast.error("Failed to capture facial data");
+          return;
+        }
+
+        toast.success(`Captured ${faceFrames.length} frames for training`);
+      }
+
+      await register(email, password, enableFacialAuth, faceFrames);
       toast.success("Registration successful!");
 
       // Reset form
@@ -415,32 +484,51 @@ export default function UserRegistration() {
 
           {cameraStatus === "active" && (
             <div className="space-y-2">
-              <p className="text-sm text-green-600 font-medium">✓ Camera is active and ready</p>
-              <div className="flex gap-2 justify-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    stopCamera();
-                    setTimeout(activateCamera, 300);
-                  }}
-                  disabled={isLoading}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Restart Camera
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={stopCamera}
-                  disabled={isLoading}
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  Stop Camera
-                </Button>
-              </div>
+              {isCapturing ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-blue-600 font-medium">
+                    📸 Capturing facial data... {captureCount}/5
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Please look directly at the camera and stay still
+                  </p>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(captureCount / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-green-600 font-medium">✓ Camera is active and ready</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        stopCamera();
+                        setTimeout(activateCamera, 300);
+                      }}
+                      disabled={isLoading}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Restart Camera
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={stopCamera}
+                      disabled={isLoading}
+                    >
+                      <Camera className="h-4 w-4 mr-2" />
+                      Stop Camera
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

@@ -10,22 +10,18 @@ export function GetCurrentUser() {
   return window['go']['security']['FacialSystem']['GetCurrentUser']();
 }
 
-export function GetRegisteredUserCount() {
-  return window['go']['security']['FacialSystem']['GetRegisteredUserCount']();
-}
-
 export function IsInitialized() {
   return window['go']['security']['FacialSystem']['IsInitialized']();
 }
 
-export function LoginUser() {
-  return window['go']['security']['FacialSystem']['LoginUser']();
+export function LoginUserWithFrame(arg1, arg2) {
+  return window['go']['security']['FacialSystem']['LoginUserWithFrame'](arg1, arg2);
 }
 
 export function Logout() {
   return window['go']['security']['FacialSystem']['Logout']();
 }
 
-export function TrainNewUser(arg1) {
-  return window['go']['security']['FacialSystem']['TrainNewUser'](arg1);
+export function TrainNewUserWithFrames(arg1, arg2) {
+  return window['go']['security']['FacialSystem']['TrainNewUserWithFrames'](arg1, arg2);
 }

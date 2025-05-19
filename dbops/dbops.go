@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,7 +68,7 @@ func createTables() error {
 	_, err := DB.Exec(`
 	CREATE TABLE IF NOT EXISTS face_features (
 		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
+
 		features BLOB NOT NULL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY(user_id) REFERENCES users(id)
@@ -282,7 +284,8 @@ func DeleteData(tableName, id string) error {
 // Specific functions for facial recognition
 
 // StoreFaceFeatures stores facial features for a user
-func StoreFaceFeatures(userID string, features []float64) (string, error) {
+func StoreFaceFeatures(dbPath string, features []float64) (string, error) {
+	DB, err := sql.Open("sqlite3", dbPath)
 	if DB == nil {
 		return "", errors.New("database not initialized")
 	}
@@ -298,8 +301,8 @@ func StoreFaceFeatures(userID string, features []float64) (string, error) {
 
 	// Store in face_features table
 	_, err = DB.Exec(
-		"INSERT INTO face_features (id, user_id, features) VALUES (?, ?, ?)",
-		featureID, userID, featuresBytes,
+		"INSERT INTO face_features (id, features) VALUES (?, ?)",
+		featureID, featuresBytes,
 	)
 	if err != nil {
 		return "", fmt.Errorf("error storing face features: %v", err)
@@ -338,22 +341,30 @@ func GetUserFaceFeatures(userID string) ([]float64, error) {
 }
 
 // GetAllUsersFaceFeatures retrieves facial features for all users
-func GetAllUsersFaceFeatures() (map[string][]float64, error) {
+func GetAllUsersFaceFeaturesOLD() (map[string][]float64, error) {
 	if DB == nil {
 		return nil, errors.New("database not initialized")
 	}
 
 	// Query to get the latest face features for each user
+	// rows, err := DB.Query(`
+	// 	SELECT u.id, u.email, ff.features
+	// 	FROM users u
+	// 	JOIN face_features ff ON u.id = ff.user_id
+	// 	WHERE ff.id IN (
+	// 		SELECT MAX(id)
+	// 		FROM face_features
+	// 		GROUP BY user_id
+	// 	)
+	// `)
+	//
 	rows, err := DB.Query(`
-		SELECT u.id, u.email, ff.features
-		FROM users u
-		JOIN face_features ff ON u.id = ff.user_id
-		WHERE ff.id IN (
-			SELECT MAX(id)
-			FROM face_features
-			GROUP BY user_id
-		)
-	`)
+    SELECT u.id, u.email, ff.features
+    FROM users u
+    JOIN face_features ff ON u.facial_data_id = ff.id
+    WHERE u.has_facial_auth = 1
+      AND u.facial_data_id IS NOT NULL
+`)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving users face features: %v", err)
 	}
@@ -379,6 +390,54 @@ func GetAllUsersFaceFeatures() (map[string][]float64, error) {
 	return userFeatures, nil
 }
 
+func GetAllUsersFaceFeatures(DB *sql.DB) (map[string][]float64, error) {
+	//DB, err := sql.Open("sqlite3", dbpath)
+	if DB == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	// Query to get face features for all users with facial auth enabled
+	rows, err := DB.Query(`
+		SELECT u.id, u.email, ff.features
+		FROM users u
+		JOIN face_features ff ON u.facial_data_id = ff.id
+		WHERE u.has_facial_auth = 1
+		  AND u.facial_data_id IS NOT NULL
+		  AND u.is_active = 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving users face features: %v", err)
+	}
+	defer rows.Close()
+
+	// Process results
+	userFeatures := make(map[string][]float64)
+	for rows.Next() {
+		var userID int // Change to int since it's INTEGER PRIMARY KEY
+		var email string
+		var featuresBytes []byte
+
+		if err := rows.Scan(&userID, &email, &featuresBytes); err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
+		}
+
+		var features []float64
+		if err := json.Unmarshal(featuresBytes, &features); err != nil {
+			return nil, fmt.Errorf("error unmarshaling features for user %s: %v", email, err)
+		}
+
+		// Convert userID to string for the map key
+		userFeatures[strconv.Itoa(userID)] = features
+	}
+
+	// Check for iteration errors
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
+	}
+
+	return userFeatures, nil
+}
+
 // GetUserByEmail retrieves a user by email
 func GetUserByEmail(email string) (map[string]interface{}, error) {
 	if DB == nil {
@@ -386,7 +445,7 @@ func GetUserByEmail(email string) (map[string]interface{}, error) {
 	}
 
 	// Get user by email
-	row := DB.QueryRow("SELECT id, email, created_at, modified_at FROM users WHERE email = ?", email)
+	row := DB.QueryRow("SELECT id, email, created_at FROM users WHERE email = ?", email)
 
 	var user map[string]interface{} = make(map[string]interface{})
 	var id, userEmail string
@@ -402,7 +461,7 @@ func GetUserByEmail(email string) (map[string]interface{}, error) {
 	user["id"] = id
 	user["email"] = userEmail
 	user["created_at"] = createdAt
-	user["modified_at"] = modifiedAt
+	//user["modified_at"] = modifiedAt
 
 	return user, nil
 }
@@ -438,13 +497,14 @@ func CreateUser(email string) (string, error) {
 }
 
 // GetUserByFaceFeatures finds a user by comparing face features
-func GetUserByFaceFeatures(features []float64, similarityThreshold float64) (string, error) {
+func GetUserByFaceFeaturesOLD(dbpath string, features []float64, similarityThreshold float64) (string, error) {
+	DB, err := sql.Open("sqlite3", dbpath)
 	if DB == nil {
 		return "", errors.New("database not initialized")
 	}
 
 	// Get all users' face features
-	allUserFeatures, err := GetAllUsersFaceFeatures()
+	allUserFeatures, err := GetAllUsersFaceFeatures(DB)
 	if err != nil {
 		return "", err
 	}
@@ -477,8 +537,57 @@ func GetUserByFaceFeatures(features []float64, similarityThreshold float64) (str
 	return "", fmt.Errorf("no matching user found (best match: %.2f, threshold: %.2f)", bestSimilarity, similarityThreshold)
 }
 
+func GetUserByFaceFeatures(dbpath string, features []float64, similarityThreshold float64) (string, error) {
+	DB, err := sql.Open("sqlite3", dbpath)
+	if DB == nil {
+		return "", errors.New("database not initialized")
+	}
+
+	// Get all users' face features
+	allUserFeatures, err := GetAllUsersFaceFeatures(DB)
+	if err != nil {
+		return "", err
+	}
+
+	if len(allUserFeatures) == 0 {
+		return "", errors.New("no users with facial authentication found")
+	}
+
+	// Find the best match
+	var bestMatchUserID string
+	var bestSimilarity float64 = -1 // Cosine similarity ranges from -1 to 1
+
+	for userID, userFeatures := range allUserFeatures {
+		similarity := calculateCosineSimilarity(features, userFeatures)
+		fmt.Printf("User %s similarity: %.3f\n", userID, similarity)
+
+		if similarity > bestSimilarity {
+			bestSimilarity = similarity
+			bestMatchUserID = userID
+		}
+	}
+
+	// Check if similarity exceeds threshold
+	if bestSimilarity >= similarityThreshold {
+		// Get user email by ID
+		var email string
+		err := DB.QueryRow("SELECT email FROM users WHERE id = ?", bestMatchUserID).Scan(&email)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return "", fmt.Errorf("user not found for ID: %s", bestMatchUserID)
+			}
+			return "", fmt.Errorf("error getting user email: %v", err)
+		}
+
+		fmt.Printf("Match found! User: %s, Similarity: %.3f\n", email, bestSimilarity)
+		return email, nil
+	}
+
+	return "", fmt.Errorf("no matching user found (best match: %.3f, threshold: %.3f)", bestSimilarity, similarityThreshold)
+}
+
 // calculateCosineSimilarity calculates the cosine similarity between two feature vectors
-func calculateCosineSimilarity(a, b []float64) float64 {
+func calculateCosineSimilarityOld(a, b []float64) float64 {
 	if len(a) != len(b) {
 		return -1 // Error case
 	}
@@ -498,4 +607,28 @@ func calculateCosineSimilarity(a, b []float64) float64 {
 	}
 
 	return dotProduct / magnitudeA
+}
+
+func calculateCosineSimilarity(a, b []float64) float64 {
+	if len(a) != len(b) {
+		return -1 // Invalid similarity
+	}
+
+	if len(a) == 0 {
+		return 0
+	}
+
+	var dotProduct, normA, normB float64
+
+	for i := 0; i < len(a); i++ {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }

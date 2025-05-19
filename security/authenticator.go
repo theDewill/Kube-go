@@ -44,9 +44,10 @@ type LoginRequest struct {
 
 // RegistrationRequest represents a user registration request
 type RegistrationRequest struct {
-	Email            string `json:"email"`
-	Password         string `json:"password"`
-	EnableFacialAuth bool   `json:"enable_facial_auth"`
+	Email            string   `json:"email"`
+	Password         string   `json:"password"`
+	EnableFacialAuth bool     `json:"enable_facial_auth"`
+	FaceFrames       []string `json:"face_frames,omitempty"`
 }
 
 // AuthResponse represents an authentication response
@@ -171,7 +172,7 @@ func (um *UserManager) initDatabase() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT UNIQUE NOT NULL,
 			password_hash TEXT,
-			facial_data_id TEXT,
+			facial_data_id TEXT UNIQUE,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			last_login_at TIMESTAMP,
 			is_active BOOLEAN NOT NULL DEFAULT 1,
@@ -185,6 +186,17 @@ func (um *UserManager) initDatabase() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create users table: %w", err)
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS face_features (
+			id TEXT PRIMARY KEY,
+			features BLOB NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (id) REFERENCES users(facial_data_id) ON DELETE CASCADE
+		)`)
+	if err != nil {
+		return fmt.Errorf("failed to create facefeature table: %w", err)
 	}
 
 	// Create sessions table for session management
@@ -252,10 +264,23 @@ func (um *UserManager) RegisterUser(req RegistrationRequest) (*AuthResponse, err
 	}
 
 	// Handle facial authentication if enabled
+	// var facialDataID string
+	// if req.EnableFacialAuth && um.facialSystem != nil {
+	// 	println("training the user")
+	// 	faceID, err := um.facialSystem.TrainNewUser(req.Email)
+	// 	if err != nil {
+	// 		return &AuthResponse{
+	// 			Success: false,
+	// 			Message: fmt.Sprintf("Failed to register facial data: %v", err),
+	// 		}, nil
+	// 	}
+	// 	facialDataID = faceID
+	// }
 	var facialDataID string
 	if req.EnableFacialAuth && um.facialSystem != nil {
-		println("training the user")
-		faceID, err := um.facialSystem.TrainNewUser(req.Email)
+
+		println("CHECKING FACIAL SYSTEM")
+		faceID, err := um.facialSystem.TrainNewUserWithFrames(um.dbPath, req.FaceFrames)
 		if err != nil {
 			return &AuthResponse{
 				Success: false,
@@ -263,6 +288,29 @@ func (um *UserManager) RegisterUser(req RegistrationRequest) (*AuthResponse, err
 			}, nil
 		}
 		facialDataID = faceID
+
+		// if len(req.FaceFrames) > 0 {
+		// 	// Use provided frames from frontend
+		// 	println("CHECKING FACIAL SYSTEM")
+		// 	faceID, err := um.facialSystem.TrainNewUserWithFrames(req.FaceFrames)
+		// 	if err != nil {
+		// 		return &AuthResponse{
+		// 			Success: false,
+		// 			Message: fmt.Sprintf("Failed to register facial data: %v", err),
+		// 		}, nil
+		// 	}
+		// 	facialDataID = faceID
+		// } else {
+		// 	// Fallback to camera-based training (existing method)
+		// 	faceID, err := um.facialSystem.TrainNewUser(req.Email)
+		// 	if err != nil {
+		// 		return &AuthResponse{
+		// 			Success: false,
+		// 			Message: fmt.Sprintf("Failed to register facial data: %v", err),
+		// 		}, nil
+		// 	}
+		// 	facialDataID = faceID
+		// }
 	}
 
 	// Create user in database
@@ -370,16 +418,23 @@ func (um *UserManager) LoginWithCredentials(email, password string) (*AuthRespon
 }
 
 // LoginWithFacialAuth authenticates user using facial recognition
-func (um *UserManager) LoginWithFacialAuth() (*AuthResponse, error) {
+func (um *UserManager) LoginWithFacialAuth(frame string) (*AuthResponse, error) {
 	if um.facialSystem == nil {
 		return &AuthResponse{
 			Success: false,
 			Message: "Facial authentication not available",
 		}, nil
 	}
+	if frame == "" {
+		return &AuthResponse{
+			Success: false,
+			Message: "No frame data provided",
+		}, nil
+	}
 
 	// Perform facial recognition
-	email, err := um.facialSystem.LoginUser()
+	//frame := "frame" //ADJUST this
+	email, err := um.facialSystem.LoginUserWithFrame(um.dbPath, frame)
 	if err != nil {
 		return &AuthResponse{
 			Success: false,

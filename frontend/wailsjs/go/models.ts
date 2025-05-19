@@ -312,6 +312,7 @@ export namespace security {
 	    email: string;
 	    password: string;
 	    enable_facial_auth: boolean;
+	    face_frames?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RegistrationRequest(source);
@@ -322,6 +323,7 @@ export namespace security {
 	        this.email = source["email"];
 	        this.password = source["password"];
 	        this.enable_facial_auth = source["enable_facial_auth"];
+	        this.face_frames = source["face_frames"];
 	    }
 	}
 
