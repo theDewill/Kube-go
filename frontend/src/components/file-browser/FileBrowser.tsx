@@ -281,8 +281,9 @@ export function FileBrowser() {
           toast.success(`${item.name} deleted`);
           await loadDirectoryContents();
           break;
-        case "Rename":
+        case "Rename": {
           // This would typically open a dialog to get the new name
+          console.log("rename clicked");
           const newName = prompt("Enter new name:", item.name);
           if (newName && newName !== item.name) {
             await FileBrowserAPI.renameItem(item.path, newName);
@@ -290,6 +291,7 @@ export function FileBrowser() {
             await loadDirectoryContents();
           }
           break;
+        }
         case "Download":
           if (item.type === "file") {
             const blob = await FileBrowserAPI.downloadFile(item.path);
@@ -318,7 +320,7 @@ export function FileBrowser() {
   ).length;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full flex flex-col">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <Breadcrumb path={currentPath} onNavigate={navigateToFolder} />

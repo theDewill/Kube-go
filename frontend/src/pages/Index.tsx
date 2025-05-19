@@ -21,7 +21,8 @@ const Index = () => {
     <AppLayout>
       <Tabs defaultValue="files" className="h-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
-          <TabsList>
+          <FileBrowser />
+          {/* <TabsList>
             <TabsTrigger value="files" className="flex items-center">
               <FolderOpen className="h-4 w-4 mr-2" />
               Files
@@ -30,21 +31,21 @@ const Index = () => {
               <LayoutDashboard className="h-4 w-4 mr-2" />
               Dashboard
             </TabsTrigger>
-          </TabsList>
+          </TabsList> */}
         </div>
 
-        <TabsContent value="files" className="flex-1 h-0">
+        {/* <TabsContent value="files" className="flex-1 h-0">
           <FileBrowser />
-        </TabsContent>
+        </TabsContent> */}
 
-        <TabsContent value="dashboard" className="space-y-6 flex-1 h-0 overflow-auto">
+        {/* <TabsContent value="dashboard" className="space-y-6 flex-1 h-0 overflow-auto">
           <h2 className="text-2xl font-bold">Dashboard</h2>
           <StorageOverview />
 
           <div className="grid gap-4 md:grid-cols-3">
             <RecentActivity />
           </div>
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </AppLayout>
   );

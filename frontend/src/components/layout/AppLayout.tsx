@@ -20,8 +20,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <UserHeader />
-        <Header toggleSidebar={toggleSidebar} />
+        <UserHeader toggleSidebar={toggleSidebar} />
+
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
     </div>

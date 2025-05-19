@@ -114,18 +114,18 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
           />
           <SidebarItem
             icon={Snowflake}
-            label="Refrigerated"
+            label="Refrigerator"
             isOpen={isOpen}
             isActive={isActive("Refrigerated")}
             onClick={() => handleNavigation("Refrigerated")}
           />
-          <SidebarItem
+          {/* <SidebarItem
             icon={Share2}
             label="Shared"
             isOpen={isOpen}
             isActive={isActive("Shared")}
             onClick={() => handleNavigation("Shared")}
-          />
+          /> */}
           {/* <SidebarItem
             icon={Star}
             label="Starred"
@@ -154,13 +154,13 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             <h3 className="text-xs font-medium text-muted-foreground">Administration</h3>
           </div>
 
-          <SidebarItem
+          {/* <SidebarItem
             icon={Users}
             label="Users"
             isOpen={isOpen}
             isActive={isActive("Users")}
             onClick={() => handleNavigation("Users")}
-          />
+          /> */}
           <SidebarItem
             icon={Server}
             label="Network"
@@ -168,13 +168,13 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             isActive={isActive("Nodes")}
             onClick={() => handleNavigation("Nodes")}
           />
-          <SidebarItem
+          {/* <SidebarItem
             icon={HardDrive}
             label="Storage"
             isOpen={isOpen}
             isActive={isActive("Storage")}
             onClick={() => handleNavigation("Storage")}
-          />
+          /> */}
           {/* <SidebarItem
             icon={PieChart}
             label="Analytics"
