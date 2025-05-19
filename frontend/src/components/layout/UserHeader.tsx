@@ -215,7 +215,7 @@ export function UserHeader({ toggleSidebar }: UserHeaderProps) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => setShowLogoutWarning(true)}
+                  onClick={() => handleLogout()}
                   className="text-red-600 dark:text-red-400"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
