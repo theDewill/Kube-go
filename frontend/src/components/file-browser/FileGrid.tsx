@@ -32,6 +32,33 @@ interface FileGridProps {
   onContextAction: (action: string, item: FileType | FolderType) => void;
 }
 
+// Animated scrolling text component
+function ScrollingText({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`relative overflow-hidden group ${className}`}>
+      <div className="animated-text whitespace-nowrap transition-transform duration-1000 ease-linear group-hover:animate-scroll">
+        {children}
+      </div>
+      <style jsx>{`
+        @keyframes scroll {
+          0% {
+            transform: translateX(0);
+          }
+          50% {
+            transform: translateX(calc(-100% + 100px));
+          }
+          100% {
+            transform: translateX(0);
+          }
+        }
+        .group:hover .animated-text {
+          animation: scroll 3s infinite;
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export function FileGrid({ files, folders, onFolderClick, onContextAction }: FileGridProps) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
@@ -50,20 +77,65 @@ export function FileGrid({ files, folders, onFolderClick, onContextAction }: Fil
 
   return (
     <div className="w-full h-full">
+      <style jsx global>{`
+        @keyframes scroll-text {
+          0% {
+            transform: translateX(0);
+          }
+          25% {
+            transform: translateX(0);
+          }
+          75% {
+            transform: translateX(calc(-100% + 120px));
+          }
+          100% {
+            transform: translateX(calc(-100% + 120px));
+          }
+        }
+
+        .scrolling-text {
+          white-space: nowrap;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .scrolling-text-inner {
+          display: inline-block;
+          transition: transform 0.3s ease;
+        }
+
+        .group:hover .scrolling-text-inner {
+          animation: scroll-text 3s ease-in-out infinite;
+        }
+
+        .truncate-ellipsis {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      `}</style>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full h-fit">
         {folders.map((folder) => (
           <ContextMenu key={folder.id}>
             <ContextMenuTrigger>
               <div
-                className={`folder-card cursor-pointer ${selectedItems.includes(folder.id) ? "ring-2 ring-primary" : ""}`}
+                className={`folder-card cursor-pointer group ${selectedItems.includes(folder.id) ? "ring-2 ring-primary" : ""}`}
                 onClick={(e) => handleItemClick(folder, e)}
               >
                 <div className="flex flex-col items-center justify-center h-full">
                   <div className="mb-2">
                     <Folder className="h-12 w-12 text-icebox-600" />
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium truncate max-w-full">{folder.name}</p>
+                  <div className="text-center w-full px-2">
+                    <div className="scrolling-text w-full">
+                      <p className="text-sm font-medium scrolling-text-inner group-hover:animate-none">
+                        <span className="group-hover:hidden truncate-ellipsis block">
+                          {folder.name}
+                        </span>
+                        <span className="hidden group-hover:inline">{folder.name}</span>
+                      </p>
+                    </div>
                     <p className="text-xs text-muted-foreground">{folder.itemCount} items</p>
                   </div>
                 </div>
@@ -107,7 +179,7 @@ export function FileGrid({ files, folders, onFolderClick, onContextAction }: Fil
             <ContextMenu key={file.id}>
               <ContextMenuTrigger>
                 <div
-                  className={`file-card cursor-pointer ${isRefrigerated ? "refrigerated" : ""} ${selectedItems.includes(file.id) ? "ring-2 ring-primary" : ""}`}
+                  className={`file-card cursor-pointer group ${isRefrigerated ? "refrigerated" : ""} ${selectedItems.includes(file.id) ? "ring-2 ring-primary" : ""}`}
                   onClick={(e) => handleItemClick(file, e)}
                 >
                   <div className="flex flex-col items-center justify-center h-full relative">
@@ -152,9 +224,16 @@ export function FileGrid({ files, folders, onFolderClick, onContextAction }: Fil
                         </div>
                       )}
                     </div>
-                    <div className="text-center">
-                      <p className="text-sm font-medium truncate max-w-full">{file.name}</p>
-                      <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                    <div className="text-center w-full px-2">
+                      <div className="scrolling-text w-full">
+                        <p className="text-sm font-medium scrolling-text-inner">
+                          <span className="group-hover:hidden truncate-ellipsis block">
+                            {file.name}
+                          </span>
+                          <span className="hidden group-hover:inline">{file.name}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground truncate">
                         <span>{file.size}</span>
                         <span>•</span>
                         <span>{file.lastModified}</span>
