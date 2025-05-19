@@ -34,6 +34,8 @@ export function RenameItem(arg1:string,arg2:string):Promise<void>;
 
 export function SearchFiles(arg1:string,arg2:number):Promise<Array<kfiles.SearchResult>>;
 
+export function SearchFilesOld(arg1:string,arg2:number):Promise<Array<kfiles.SearchResult>>;
+
 export function UnrefrigerateFile(arg1:string):Promise<void>;
 
 export function UploadFile(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean):Promise<void>;

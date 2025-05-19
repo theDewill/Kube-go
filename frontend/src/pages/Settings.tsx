@@ -26,6 +26,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { FileBrowserAPI } from "@/lib/file-api";
 import { TrainNewUser } from "@/../wailsjs/go/security/FacialSystem";
+import UserRegistration from "@/components/auth/UserRegister";
 
 interface AppSettings {
   gemini_api_key: string;
@@ -452,7 +453,8 @@ export default function Settings() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-4">
+              <UserRegistration />
+              {/* <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="registerEmail">Email</Label>
                   <div className="relative">
@@ -493,7 +495,7 @@ export default function Settings() {
                 >
                   {isLoading ? "Registering..." : "Register Face"}
                 </Button>
-              </div>
+              </div> */}
             </CardContent>
           </Card>
         </div>

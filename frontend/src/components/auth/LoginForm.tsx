@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, Key, LockKeyhole, Mail, UserPlus } from "lucide-react";
+import { Camera, Key, LockKeyhole, Mail, UserPlus, Eye, EyeOff } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -13,31 +13,38 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LoginUser } from "@/../wailsjs/go/security/FacialSystem";
+import { useAuth } from "@/contexts/AuthContext";
 
-export function LoginForm({ onLogin, facialSystem }) {
-  const [isLoading, setIsLoading] = useState(false);
+export function LoginForm() {
+  const { login, loginWithFace, isLoading } = useAuth();
+
+  // Form states
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [registerEmail, setRegisterEmail] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Camera states
   const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const handleLogin = (e) => {
+  // Tab state
+  const [activeTab, setActiveTab] = useState("credentials");
+
+  const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
-    // Simulate login for credential-based login
-    setTimeout(() => {
-      setIsLoading(false);
-      if (email && password) {
-        toast.success("Login successful");
-        onLogin();
-      } else {
-        toast.error("Please enter both email and password");
-      }
-    }, 1500);
+    if (!email || !password) {
+      toast.error("Please enter both email and password");
+      return;
+    }
+
+    try {
+      await login(email, password);
+      toast.success("Login successful!");
+    } catch (error: any) {
+      toast.error(error.message || "Login failed");
+    }
   };
 
   const startCamera = async () => {
@@ -48,7 +55,7 @@ export function LoginForm({ onLogin, facialSystem }) {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { facingMode: "user" },
         audio: false,
       });
 
@@ -76,25 +83,24 @@ export function LoginForm({ onLogin, facialSystem }) {
   };
 
   const handleFacialLogin = async () => {
-    setIsLoading(true);
+    if (!cameraActive) {
+      toast.error("Please enable the camera first");
+      return;
+    }
 
     try {
-      // Call the Go method for facial login
-      const userEmail = await LoginUser();
-
-      setIsLoading(false);
-      toast.success(`Welcome back, ${userEmail}`);
+      await loginWithFace();
+      toast.success("Welcome back!");
       stopCamera();
-      onLogin();
-    } catch (error) {
-      setIsLoading(false);
-      toast.error(`Authentication failed: ${error.message || "Face not recognized"}`);
+    } catch (error: any) {
+      toast.error(error.message || "Face not recognized");
     }
   };
 
-  // Handle tab changes to start/stop camera
-  const handleTabChange = (value) => {
-    if (value === "facial" || value === "register") {
+  // Handle tab changes to manage camera
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === "facial") {
       startCamera();
     } else {
       stopCamera();
@@ -108,28 +114,35 @@ export function LoginForm({ onLogin, facialSystem }) {
     };
   }, []);
 
+  // Auto-start camera if facial tab is selected on mount
+  useEffect(() => {
+    if (activeTab === "facial") {
+      startCamera();
+    }
+  }, []);
+
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 p-4">
-      <Card className="w-full max-w-md mx-auto">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Kube Login</CardTitle>
-          <CardDescription>An On-premise storage solution</CardDescription>
+          <CardDescription>Secure access to your distributed storage</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="facial" onValueChange={handleTabChange}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="facial">
-                <Camera className="h-4 w-4 mr-2" />
-                Facial Login
-              </TabsTrigger>
-              <TabsTrigger value="credentials">
-                <Key className="h-4 w-4 mr-2" />
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="credentials" className="flex items-center gap-2">
+                <Key className="h-4 w-4" />
                 Credentials
+              </TabsTrigger>
+              <TabsTrigger value="facial" className="flex items-center gap-2">
+                <Camera className="h-4 w-4" />
+                Facial Login
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="credentials">
-              <form onSubmit={handleLogin} className="space-y-4">
+            <TabsContent value="credentials" className="space-y-4 mt-4">
+              <form onSubmit={handleCredentialLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
@@ -141,63 +154,93 @@ export function LoginForm({ onLogin, facialSystem }) {
                       className="pl-10"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                      required
                     />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <LockKeyhole className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
-                      className="pl-10"
+                      type={showPassword ? "text" : "password"}
+                      className="pl-10 pr-10"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                      required
                     />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                      disabled={isLoading}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
                   </div>
                 </div>
+
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Logging in..." : "Login"}
+                  {isLoading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
             </TabsContent>
 
-            <TabsContent value="facial">
-              <div className="space-y-4 text-center">
-                <div className="w-36 h-36 mx-auto rounded-full border-2 border-dashed border-muted-foreground overflow-hidden flex items-center justify-center">
+            <TabsContent value="facial" className="space-y-4 mt-4">
+              <div className="space-y-4">
+                <div className="mx-auto w-64 h-48 rounded-lg border-2 border-dashed border-muted-foreground overflow-hidden">
                   {cameraActive ? (
                     <video
                       ref={videoRef}
                       autoPlay
                       playsInline
                       muted
-                      className="min-w-full min-h-full object-cover"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full w-full">
+                    <div className="flex items-center justify-center h-full">
                       <Camera className="h-12 w-12 text-muted-foreground" />
                     </div>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Position your face in front of the camera to login
+
+                <p className="text-sm text-muted-foreground text-center">
+                  {cameraActive
+                    ? "Position your face in the frame and click to login"
+                    : "Click the button below to enable your camera"}
                 </p>
-                <Button
-                  onClick={handleFacialLogin}
-                  className="w-full bg-green-500 hover:bg-green-600"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Scanning..." : "Login with Face"}
-                </Button>
+
+                {!cameraActive ? (
+                  <Button onClick={startCamera} className="w-full" variant="outline">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Enable Camera
+                  </Button>
+                ) : (
+                  <Button onClick={handleFacialLogin} className="w-full" disabled={isLoading}>
+                    {isLoading ? "Scanning..." : "Login with Face"}
+                  </Button>
+                )}
               </div>
             </TabsContent>
           </Tabs>
         </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <div className="text-xs text-muted-foreground text-center">
-            Your face data is processed locally and never leaves your device
-          </div>
+
+        <CardFooter>
+          <p className="text-xs text-muted-foreground text-center w-full">
+            {activeTab === "facial"
+              ? "Your face data is processed locally and never leaves your device"
+              : "Your credentials are securely encrypted and stored"}
+          </p>
         </CardFooter>
       </Card>
     </div>

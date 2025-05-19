@@ -222,3 +222,108 @@ export namespace kubenet {
 
 }
 
+export namespace security {
+	
+	export class User {
+	    id: number;
+	    email: string;
+	    facial_data_id?: string;
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    last_login_at?: any;
+	    is_active: boolean;
+	    has_facial_auth: boolean;
+	    is_admin: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new User(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.email = source["email"];
+	        this.facial_data_id = source["facial_data_id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.last_login_at = this.convertValues(source["last_login_at"], null);
+	        this.is_active = source["is_active"];
+	        this.has_facial_auth = source["has_facial_auth"];
+	        this.is_admin = source["is_admin"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AuthResponse {
+	    success: boolean;
+	    user?: User;
+	    token?: string;
+	    message?: string;
+	    session_id?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AuthResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.success = source["success"];
+	        this.user = this.convertValues(source["user"], User);
+	        this.token = source["token"];
+	        this.message = source["message"];
+	        this.session_id = source["session_id"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RegistrationRequest {
+	    email: string;
+	    password: string;
+	    enable_facial_auth: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new RegistrationRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.email = source["email"];
+	        this.password = source["password"];
+	        this.enable_facial_auth = source["enable_facial_auth"];
+	    }
+	}
+
+}
+

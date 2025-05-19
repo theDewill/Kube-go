@@ -66,6 +66,10 @@ export function SearchFiles(arg1, arg2) {
   return window['go']['kfiles']['FileBrowser']['SearchFiles'](arg1, arg2);
 }
 
+export function SearchFilesOld(arg1, arg2) {
+  return window['go']['kfiles']['FileBrowser']['SearchFilesOld'](arg1, arg2);
+}
+
 export function UnrefrigerateFile(arg1) {
   return window['go']['kfiles']['FileBrowser']['UnrefrigerateFile'](arg1);
 }

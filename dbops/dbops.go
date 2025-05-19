@@ -51,19 +51,19 @@ func Close() error {
 // createTables creates the necessary tables if they don't exist
 func createTables() error {
 	// Create users table
-	_, err := DB.Exec(`
-	CREATE TABLE IF NOT EXISTS users (
-		id TEXT PRIMARY KEY,
-		email TEXT UNIQUE NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	)`)
-	if err != nil {
-		return err
-	}
+	// _, err := DB.Exec(`
+	// CREATE TABLE IF NOT EXISTS users (
+	// 	id TEXT PRIMARY KEY,
+	// 	email TEXT UNIQUE NOT NULL,
+	// 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	// 	modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	// )`)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Create face_features table
-	_, err = DB.Exec(`
+	_, err := DB.Exec(`
 	CREATE TABLE IF NOT EXISTS face_features (
 		id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL,

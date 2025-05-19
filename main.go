@@ -54,10 +54,17 @@ func main() {
 			fmt.Printf("Number of registered users: %d\n", userCount)
 		}
 	}
+
+	userManager, umErr := security.NewUserManager(dbPath, facialSystem)
+	if umErr != nil {
+		log.Fatalf("Error initializing User Manager: %v", umErr)
+	}
+	log.Printf("User Manager initialized with database: %s", dbPath)
 	app := NewApp()
 	app.register = Registry
 	app.fileBrowser = fileBrowser
 	apperr := wails.Run(&options.App{
+
 		Title:  "Kube",
 		Width:  1280,
 		Height: 768,
@@ -72,6 +79,7 @@ func main() {
 			fileBrowser,
 			RFG,
 			facialSystem,
+			userManager,
 		},
 		// OnShutdown: func(ctx) {
 
