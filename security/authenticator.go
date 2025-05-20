@@ -199,6 +199,16 @@ func (um *UserManager) initDatabase() error {
 		return fmt.Errorf("failed to create facefeature table: %w", err)
 	}
 
+	_, err = db.Exec(`
+    CREATE TABLE IF NOT EXISTS compress_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        in_file_path TEXT NOT NULL,
+        compressed_file_path TEXT NOT NULL
+    );`)
+	if err != nil {
+		return fmt.Errorf("failed to create compression logs table: %w", err)
+	}
+
 	// Create sessions table for session management
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS user_sessions (

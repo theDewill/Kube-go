@@ -1,4 +1,4 @@
-package main
+package refrigirator
 
 import (
 	"bufio"
@@ -20,7 +20,7 @@ const (
 	HeaderMagic = "KBE1" // File format identifier
 )
 
-func Compressor(modePtr string, inputDir string, outputDir string) {
+func Compressor(modePtr string, inputDir string, outputDir string) error {
 
 	// Validate arguments
 	if modePtr != "compress" && modePtr != "decompress" {
@@ -34,24 +34,29 @@ func Compressor(modePtr string, inputDir string, outputDir string) {
 	}
 
 	startTime := time.Now()
+	var rferr error
 
 	// Execute the appropriate mode
 	if modePtr == "compress" {
-		err := compressFile(inputDir, outputDir)
-		if err != nil {
-			fmt.Printf("Compression error: %v\n", err)
+		rferr = compressFile(inputDir, outputDir)
+		if rferr != nil {
+			fmt.Printf("Compression error: %v\n", rferr)
 			os.Exit(1)
+			return rferr
+
 		}
 	} else {
-		err := decompressFile(inputDir, outputDir)
-		if err != nil {
-			fmt.Printf("Decompression error: %v\n", err)
+		rferr = decompressFile(inputDir, outputDir)
+		if rferr != nil {
+			fmt.Printf("Decompression error: %v\n", rferr)
 			os.Exit(1)
+			return rferr
 		}
 	}
 
 	elapsedTime := time.Since(startTime)
 	fmt.Printf("Operation completed successfully in %v\n", elapsedTime)
+	return nil
 }
 
 // compressFile compresses a file using our improved approach

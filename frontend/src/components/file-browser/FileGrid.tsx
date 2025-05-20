@@ -63,6 +63,7 @@ export function FileGrid({ files, folders, onFolderClick, onContextAction }: Fil
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   const handleItemClick = (item: FileType | FolderType, event: React.MouseEvent) => {
+    console.log("ITEMPATH", item.path);
     if (event.ctrlKey || event.metaKey) {
       // Toggle selection
       setSelectedItems((prev) =>
@@ -269,15 +270,11 @@ export function FileGrid({ files, folders, onFolderClick, onContextAction }: Fil
                 <ContextMenuItem onClick={() => onContextAction("Share", file)}>
                   <Share2 className="h-4 w-4 mr-2" /> Share
                 </ContextMenuItem>
-                {isRefrigerated ? (
-                  <ContextMenuItem onClick={() => onContextAction("Unrefrigerate", file)}>
-                    <Snowflake className="h-4 w-4 mr-2" /> Unrefrigerate
-                  </ContextMenuItem>
-                ) : (
-                  <ContextMenuItem onClick={() => onContextAction("Refrigerate", file)}>
-                    <Snowflake className="h-4 w-4 mr-2" /> Refrigerate
-                  </ContextMenuItem>
-                )}
+
+                <ContextMenuItem onClick={() => onContextAction("Refrigirate", file)}>
+                  <Snowflake className="h-4 w-4 mr-2" /> Refrigerate
+                </ContextMenuItem>
+
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   className="text-destructive focus:text-destructive"

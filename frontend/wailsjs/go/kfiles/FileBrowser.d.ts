@@ -4,9 +4,13 @@ import {kfiles} from '../models';
 
 export function CheckStorageQuota(arg1:number):Promise<boolean>;
 
+export function CompressItem(arg1:string):Promise<void>;
+
 export function CopyItem(arg1:string,arg2:string):Promise<void>;
 
 export function CreateFolder(arg1:string,arg2:string):Promise<void>;
+
+export function DecompressItem(arg1:string):Promise<void>;
 
 export function DeleteItem(arg1:string):Promise<void>;
 
@@ -18,11 +22,15 @@ export function GenerateFileDescriptionWithModel(arg1:string,arg2:string,arg3:st
 
 export function GetCurrentPath(arg1:string):Promise<string>;
 
+export function GetCurrentPathOld(arg1:string):Promise<string>;
+
 export function GetFileInfo(arg1:string):Promise<kfiles.FileType>;
 
 export function GetStorageUsage():Promise<kfiles.StorageInfo>;
 
 export function ListDirectory(arg1:string):Promise<Array<kfiles.FileType>>;
+
+export function ListDirectoryRFG(arg1:string):Promise<Array<kfiles.FileType>>;
 
 export function MoveItem(arg1:string,arg2:string):Promise<void>;
 
@@ -41,5 +49,7 @@ export function UnrefrigerateFile(arg1:string):Promise<void>;
 export function UploadFile(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean):Promise<void>;
 
 export function UploadFileWithModel(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean,arg5:string):Promise<void>;
+
+export function UploadFileWithModelRFG(arg1:string,arg2:string,arg3:Array<number>,arg4:boolean,arg5:string):Promise<void>;
 
 export function WriteSettingsFile(arg1:Array<number>):Promise<void>;

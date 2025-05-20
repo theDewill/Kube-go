@@ -4,6 +4,7 @@ export namespace kfiles {
 	    PlatformPath: string;
 	    KubeLoadsDir: string;
 	    KubeRestsDir: string;
+	    KubeCompressDir: string;
 	    DbPath: string;
 	    NodeRegistry?: kubenet.NodeRegistry;
 	
@@ -16,6 +17,7 @@ export namespace kfiles {
 	        this.PlatformPath = source["PlatformPath"];
 	        this.KubeLoadsDir = source["KubeLoadsDir"];
 	        this.KubeRestsDir = source["KubeRestsDir"];
+	        this.KubeCompressDir = source["KubeCompressDir"];
 	        this.DbPath = source["DbPath"];
 	        this.NodeRegistry = this.convertValues(source["NodeRegistry"], kubenet.NodeRegistry);
 	    }

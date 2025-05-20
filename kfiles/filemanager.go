@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"kube-go/kubenet"
+	compo "kube-go/refrigirator"
 	"log"
 	"os"
 	"path/filepath"
@@ -31,11 +32,12 @@ type StorageInfo struct {
 
 // FileBrowser manages file operations within the Kube application
 type FileBrowser struct {
-	PlatformPath string                // Base platform-specific path
-	KubeLoadsDir string                // Dedicated kubeloads directory
-	KubeRestsDir string                // Directory for storing chunks from other nodes
-	DbPath       string                // Path to the SQLite database
-	NodeRegistry *kubenet.NodeRegistry // Reference to the NodeRegistry
+	PlatformPath    string // Base platform-specific path
+	KubeLoadsDir    string // Dedicated kubeloads directory
+	KubeRestsDir    string // Directory for storing chunks from other nodes
+	KubeCompressDir string
+	DbPath          string                // Path to the SQLite database
+	NodeRegistry    *kubenet.NodeRegistry // Reference to the NodeRegistry
 }
 
 // FileType represents a file or folder in the file system
@@ -184,14 +186,26 @@ func LaunchFileBrowser(nodeRegistry *kubenet.NodeRegistry) (*FileBrowser, error)
 	if err := os.MkdirAll(kubeRestsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create kuberests directory: %w", err)
 	}
+
+	kubeCompressDir := filepath.Join(platformPath, "kubecompress")
+	if err := os.MkdirAll(kubeCompressDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create kubecompress directory: %w", err)
+	}
+
+	kubeCompressQDir := filepath.Join(platformPath, "kubecompressqueue")
+	if err := os.MkdirAll(kubeCompressQDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create kubecompress queue directory: %w", err)
+	}
+
 	dbPath := filepath.Join(platformPath, "fileidx.sqlite")
 
 	fb := &FileBrowser{
-		PlatformPath: platformPath,
-		KubeLoadsDir: kubeLoadsDir,
-		KubeRestsDir: kubeRestsDir,
-		DbPath:       dbPath,
-		NodeRegistry: nodeRegistry,
+		PlatformPath:    platformPath,
+		KubeLoadsDir:    kubeLoadsDir,
+		KubeRestsDir:    kubeRestsDir,
+		DbPath:          dbPath,
+		KubeCompressDir: kubeCompressDir,
+		NodeRegistry:    nodeRegistry,
 	}
 	print("FileBrowser Created")
 	if err := fb.initializeDatabase(); err != nil {
@@ -283,6 +297,24 @@ func GetPlatformSpecificPath() (string, error) {
 }
 
 // GetCurrentPath returns the absolute path for a relative path within kubeloads
+func (fb *FileBrowser) GetCurrentPathOld(relativePath string) string {
+	// Replace forward slashes for Windows compatibility
+	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
+
+	// If it's the root, return the kubeloads directory
+	if relativePath == "" || relativePath == "/" {
+		return fb.KubeLoadsDir
+	}
+
+	// Remove leading slash if present
+	if strings.HasPrefix(relativePath, "/") {
+		relativePath = relativePath[1:]
+	}
+
+	return filepath.Join(fb.KubeLoadsDir, relativePath)
+}
+
+// GetCurrentPath returns the absolute path for a relative path within kubeloads
 func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 	// Replace forward slashes for Windows compatibility
 	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
@@ -295,6 +327,16 @@ func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 	// Remove leading slash if present
 	if strings.HasPrefix(relativePath, "/") {
 		relativePath = relativePath[1:]
+	}
+
+	// Check if the path contains "kubeloads" and handle it properly
+	kubeloadsPath := filepath.Join("kubeloads", string(os.PathSeparator))
+	if strings.Contains(relativePath, kubeloadsPath) {
+		// Extract the part after /kubeloads
+		parts := strings.Split(relativePath, kubeloadsPath)
+		if len(parts) > 1 {
+			relativePath = parts[len(parts)-1]
+		}
 	}
 
 	return filepath.Join(fb.KubeLoadsDir, relativePath)
@@ -407,6 +449,7 @@ func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileDat
 }
 
 // UploadFileWithModel saves an uploaded file with specified LLM model for description generation
+// FILEMANAGER
 func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string, fileData []byte, distribute bool, modelType string) error {
 	if !isValidName(fileName) {
 		return errors.New("invalid file name")
@@ -515,6 +558,40 @@ func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string
 	return nil
 }
 
+// RFGMANAGER
+func (fb *FileBrowser) UploadFileWithModelRFG(directoryPath string, fileName string, fileData []byte, distribute bool, modelType string) error {
+	if !isValidName(fileName) {
+		return errors.New("invalid file name")
+	}
+
+	// Create a unique file ID
+
+	// Calculate file hash for additional integrity verification
+	hasher := sha256.New()
+	hasher.Write(fileData)
+	//fileHash := hex.EncodeToString(hasher.Sum(nil))
+
+	// Create the target path in kubeloads
+	relativePath := strings.TrimPrefix(directoryPath, "/")
+	targetDir := filepath.Join(fb.PlatformPath, relativePath)
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// Use the fileID as filename to avoid collisions and for security
+	//storageFileName := fmt.Sprintf("%s-%s", fileID, fileName)
+	targetPath := filepath.Join(targetDir, fileName)
+
+	// Write the file to disk
+	if err := ioutil.WriteFile(targetPath, fileData, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
 // Update the ReadSettingsFile method:
 func (fb *FileBrowser) ReadSettingsFile() ([]byte, error) {
 	settingsPath := filepath.Join(fb.PlatformPath, "settings.json")
@@ -556,9 +633,127 @@ func (fb *FileBrowser) WriteSettingsFile(data []byte) error {
 }
 
 // ListDirectory lists files and folders in the specified directory
-func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
-	dirPath := fb.GetCurrentPath(path)
+// FILEMANAGER
+func (fb *FileBrowser) ListDirectoryRFG(path string) ([]FileType, error) {
+	//dirPath := fb.GetCurrentPath(path)
+	dirPath := filepath.Join(fb.PlatformPath, path)
+	print("RFGLISTER", dirPath)
 
+	// Check if directory exists
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("directory does not exist: %s", path)
+		}
+		return nil, fmt.Errorf("failed to access directory: %w", err)
+	}
+
+	if !info.IsDir() {
+		return nil, fmt.Errorf("path is not a directory: %s", path)
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	// // Open database to get distributed status
+	// db, err := sql.Open("sqlite3", fb.DbPath)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to open database: %w", err)
+	// }
+	// defer db.Close()
+
+	// Prepare a map to store distributed status by filename
+	distributedFiles := make(map[string]bool)
+
+	// Query all files from this directory
+	// rows, err := db.Query("SELECT file_path, is_distributed FROM files")
+	// if err != nil {
+	// 	log.Printf("Warning: Failed to query distributed files: %v", err)
+	// } else {
+	// 	defer rows.Close()
+
+	// 	for rows.Next() {
+	// 		var filePath string
+	// 		var isDistributed bool
+	// 		if err := rows.Scan(&filePath, &isDistributed); err != nil {
+	// 			log.Printf("Warning: Failed to scan row: %v", err)
+	// 			continue
+	// 		}
+	// 		distributedFiles[filePath] = isDistributed
+	// 	}
+	// }
+
+	files := make([]FileType, 0, len(entries))
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(dirPath, entry.Name())
+		info, err := os.Stat(entryPath)
+		if err != nil {
+			continue // Skip files with errors
+		}
+
+		// Calculate relative path from kubeloads directory
+		relativePath, err := filepath.Rel(fb.KubeLoadsDir, entryPath)
+		if err != nil {
+			continue // Skip files with errors
+		}
+
+		// Convert path separators to forward slashes for consistent API
+		relativePath = "/" + strings.ReplaceAll(relativePath, string(os.PathSeparator), "/")
+
+		// Extract the original filename (remove fileID prefix if present)
+		displayName := entry.Name()
+		if strings.Contains(displayName, "-") && !entry.IsDir() {
+			// Try to extract the original filename
+			parts := strings.SplitN(displayName, "-", 2)
+			if len(parts) == 2 && isValidUUID(parts[0]) {
+				displayName = parts[1]
+			}
+		}
+
+		// Create a FileType object
+		file := FileType{
+			ID:               uuid.New().String(),
+			Name:             displayName,
+			Path:             relativePath,
+			LastModifiedDate: info.ModTime(),
+			LastModified:     formatLastModified(info.ModTime()),
+			Owner:            "You", // Default owner
+			IsShared:         false,
+		}
+
+		if entry.IsDir() {
+			file.Type = "folder"
+			file.ItemCount = countItems(entryPath)
+		} else {
+			file.Type = "file"
+			file.SizeInBytes = info.Size()
+			file.Size = formatSize(info.Size())
+			file.Extension = getFileExtension(displayName)
+			file.IsRefrigerated = isRefrigerated(entryPath)
+
+			// Check if this file is distributed
+			file.IsDistributed = distributedFiles[relativePath]
+
+			if file.IsRefrigerated {
+				file.CompressionRatio = 0.5 // Placeholder - would need actual implementation
+			}
+		}
+
+		files = append(files, file)
+	}
+
+	return files, nil
+}
+
+// RFGMANAGER
+func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
+
+	//fmtPath := strings.Replace(path, "/kubeloads", "", 1)
+	dirPath := fb.GetCurrentPath(path)
+	print("Current LISTDIR PATH", path)
 	// Check if directory exists
 	info, err := os.Stat(dirPath)
 	if err != nil {
@@ -607,15 +802,17 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 
 	files := make([]FileType, 0, len(entries))
 
+	print("Before entry")
 	for _, entry := range entries {
 		entryPath := filepath.Join(dirPath, entry.Name())
+		print("ENTRYPATHS-->", entryPath)
 		info, err := os.Stat(entryPath)
 		if err != nil {
 			continue // Skip files with errors
 		}
 
 		// Calculate relative path from kubeloads directory
-		relativePath, err := filepath.Rel(fb.KubeLoadsDir, entryPath)
+		relativePath, err := filepath.Rel(fb.PlatformPath, entryPath)
 		if err != nil {
 			continue // Skip files with errors
 		}
@@ -826,6 +1023,54 @@ func (fb *FileBrowser) RenameItem(path string, newName string) error {
 
 	// Rename the file on disk
 	return os.Rename(itemPath, newPath)
+}
+
+func (fb *FileBrowser) CompressItem(path string) error {
+
+	db, err := sql.Open("sqlite3", fb.DbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	infilepath := ""
+	if !strings.Contains(path, fb.PlatformPath) {
+		infilepath = fb.KubeLoadsDir //filepath.Join(fb.KubeLoadsDir, infilename)
+	} else {
+		infilepath = filepath.Dir(path)
+	}
+	outfileName := filepath.Base(path) + ".kbe"
+	outputPath := filepath.Join(fb.KubeCompressDir, outfileName)
+
+	print("PATH BEFORE COMPRESSOR", fb.PlatformPath)
+	fmtpath := filepath.Join(fb.PlatformPath, path)
+	cerr := compo.Compressor("compress", fmtpath, fb.KubeCompressDir)
+	if cerr != nil {
+		fmt.Errorf("failed to perfrom compression [FileBrowser]: %w", err)
+		return cerr
+	}
+
+	_, err = db.Exec(`
+    INSERT INTO compress_logs (in_file_path, compressed_file_path)
+    VALUES (?, ?);`, infilepath, outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to log compression operation: %w", err)
+	}
+
+	return nil
+}
+
+func (fb *FileBrowser) DecompressItem(path string) error {
+	print("DECOMPRESS-->", path)
+	edtPath := strings.Replace(path, "/..", "", 1)
+	fmtpath := filepath.Join(fb.PlatformPath, edtPath)
+
+	cerr := compo.Compressor("decompress", fmtpath, fb.KubeLoadsDir)
+	if cerr != nil {
+		fmt.Errorf("failed to perfrom decompression [FileBrowser]: %w", cerr)
+		return cerr
+	}
+	return nil
 }
 
 // DeleteItem deletes a file or folder

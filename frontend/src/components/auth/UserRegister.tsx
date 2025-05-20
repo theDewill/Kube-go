@@ -45,7 +45,7 @@ export default function UserRegistration() {
   const isRequestingRef = useRef(false);
 
   const stopCamera = useCallback(() => {
-    console.log("🛑 Stopping camera");
+    console.log(" Stopping camera");
 
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
@@ -66,7 +66,7 @@ export default function UserRegistration() {
 
   const activateCamera = useCallback(async () => {
     if (isRequestingRef.current) {
-      console.log("🚫 Camera request already in progress");
+      console.log("Camera request already in progress");
       return;
     }
 
@@ -89,7 +89,7 @@ export default function UserRegistration() {
           const permissionResult = await navigator.permissions.query({
             name: "camera" as PermissionName,
           });
-          console.log("📋 Current camera permission:", permissionResult.state);
+          console.log("Current camera permission:", permissionResult.state);
 
           if (permissionResult.state === "denied") {
             setPermissionStatus("denied");
@@ -98,7 +98,7 @@ export default function UserRegistration() {
             );
           }
         } catch (permError) {
-          console.log("⚠️ Could not check permissions:", permError);
+          console.log("Could not check permissions:", permError);
           // Continue anyway, the getUserMedia call will handle it
         }
       }
@@ -115,7 +115,7 @@ export default function UserRegistration() {
         audio: false,
       });
 
-      console.log("✅ Camera stream obtained");
+      console.log("Camera stream obtained");
       setPermissionStatus("granted");
       streamRef.current = stream;
 
@@ -125,7 +125,7 @@ export default function UserRegistration() {
       const maxAttempts = 10;
 
       while (!videoElement && attempts < maxAttempts) {
-        console.log(`⏳ Waiting for video element... attempt ${attempts + 1}/${maxAttempts}`);
+        console.log(`Waiting for video element... attempt ${attempts + 1}/${maxAttempts}`);
         await new Promise((resolve) => setTimeout(resolve, 200));
         videoElement = videoRef.current;
         attempts++;
@@ -136,14 +136,14 @@ export default function UserRegistration() {
       }
 
       // Set up video element
-      console.log("📺 Setting up video element");
+      console.log("Setting up video element");
 
       // Create a promise to handle video setup
       await new Promise<void>((resolve, reject) => {
         const video = videoElement!;
 
         const handleSuccess = () => {
-          console.log("🎬 Video setup completed successfully");
+          console.log("Video setup completed successfully");
           setCameraStatus("active");
           toast.success("Camera activated successfully!");
           resolve();
@@ -163,11 +163,11 @@ export default function UserRegistration() {
 
           // Set up event handlers
           const onLoadedMetadata = () => {
-            console.log("📹 Video metadata loaded");
+            console.log("Video metadata loaded");
           };
 
           const onCanPlay = () => {
-            console.log("▶️ Video can play");
+            console.log("Video can play");
             // Try to play the video
             video
               .play()
@@ -176,7 +176,7 @@ export default function UserRegistration() {
                 handleSuccess();
               })
               .catch((playError) => {
-                console.log("⚠️ Video play failed, but continuing:", playError);
+                console.log("Video play failed, but continuing:", playError);
                 // Even if autoplay fails, we can still consider it successful
                 handleSuccess();
               });
@@ -197,7 +197,7 @@ export default function UserRegistration() {
           // Timeout fallback
           setTimeout(() => {
             if (video.readyState >= 2) {
-              console.log("⏰ Video setup timeout, but video seems ready");
+              console.log("Video setup timeout, but video seems ready");
               video.removeEventListener("loadedmetadata", onLoadedMetadata);
               video.removeEventListener("canplay", onCanPlay);
               video.removeEventListener("error", onError);
@@ -350,7 +350,7 @@ export default function UserRegistration() {
   };
 
   const handleFacialAuthToggle = (enabled: boolean) => {
-    console.log("🔄 Facial auth toggled:", enabled);
+    console.log("Facial auth toggled:", enabled);
     setEnableFacialAuth(enabled);
 
     if (!enabled) {
@@ -384,9 +384,9 @@ export default function UserRegistration() {
               cameraStatus === "active" ? "block" : "hidden"
             }`}
             style={{ transform: "scaleX(-1)" }}
-            onLoadStart={() => console.log("📺 Video load started")}
-            onCanPlay={() => console.log("▶️ Video can play event")}
-            onPlaying={() => console.log("🎬 Video playing event")}
+            onLoadStart={() => console.log(" Video load started")}
+            onCanPlay={() => console.log(" Video can play event")}
+            onPlaying={() => console.log(" Video playing event")}
             onError={(e) => console.error("❌ Video error event:", e)}
           />
 
@@ -487,7 +487,7 @@ export default function UserRegistration() {
               {isCapturing ? (
                 <div className="space-y-2">
                   <p className="text-sm text-blue-600 font-medium">
-                    📸 Capturing facial data... {captureCount}/5
+                    Capturing facial data... {captureCount}/5
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Please look directly at the camera and stay still

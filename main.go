@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"kube-go/kfiles"
 	knet "kube-go/kubenet"
-	RFG "kube-go/refrigirator"
 	security "kube-go/security"
 	"log"
 	"path/filepath"
@@ -31,7 +30,7 @@ func main() {
 	}
 
 	fileBrowser, fbErr := kfiles.LaunchFileBrowser(Registry)
-	RFG := RFG.CreateRefrigirator("1.0", "no index", fileBrowser)
+
 	if fbErr != nil {
 		log.Fatalf("Error initializing File Browser: %v", fbErr)
 	}
@@ -77,7 +76,6 @@ func main() {
 			app,
 			Registry,
 			fileBrowser,
-			RFG,
 			facialSystem,
 			userManager,
 		},

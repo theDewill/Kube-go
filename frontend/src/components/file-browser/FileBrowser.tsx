@@ -207,6 +207,7 @@ export function FileBrowser() {
       setIsLoading(true);
       setError(null);
 
+      console.log("CPATH:", currentPath);
       const result = await FileBrowserAPI.listDirectory(currentPath);
       setFiles(result.files);
       setFolders(result.folders);
@@ -287,6 +288,17 @@ export function FileBrowser() {
           const newName = prompt("Enter new name:", item.name);
           if (newName && newName !== item.name) {
             await FileBrowserAPI.renameItem(item.path, newName);
+            toast.success(`Renamed ${item.name} to ${newName}`);
+            await loadDirectoryContents();
+          }
+          break;
+        }
+        case "Refrigirate": {
+          // This would typically open a dialog to get the new name
+          console.log("Refrierate clicked");
+          const newName = prompt("Enter new name:", item.name);
+          if (newName && newName !== item.name) {
+            await FileBrowserAPI.compressItem(item.path, newName);
             toast.success(`Renamed ${item.name} to ${newName}`);
             await loadDirectoryContents();
           }

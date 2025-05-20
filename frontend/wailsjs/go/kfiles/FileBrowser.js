@@ -6,12 +6,20 @@ export function CheckStorageQuota(arg1) {
   return window['go']['kfiles']['FileBrowser']['CheckStorageQuota'](arg1);
 }
 
+export function CompressItem(arg1) {
+  return window['go']['kfiles']['FileBrowser']['CompressItem'](arg1);
+}
+
 export function CopyItem(arg1, arg2) {
   return window['go']['kfiles']['FileBrowser']['CopyItem'](arg1, arg2);
 }
 
 export function CreateFolder(arg1, arg2) {
   return window['go']['kfiles']['FileBrowser']['CreateFolder'](arg1, arg2);
+}
+
+export function DecompressItem(arg1) {
+  return window['go']['kfiles']['FileBrowser']['DecompressItem'](arg1);
 }
 
 export function DeleteItem(arg1) {
@@ -34,6 +42,10 @@ export function GetCurrentPath(arg1) {
   return window['go']['kfiles']['FileBrowser']['GetCurrentPath'](arg1);
 }
 
+export function GetCurrentPathOld(arg1) {
+  return window['go']['kfiles']['FileBrowser']['GetCurrentPathOld'](arg1);
+}
+
 export function GetFileInfo(arg1) {
   return window['go']['kfiles']['FileBrowser']['GetFileInfo'](arg1);
 }
@@ -44,6 +56,10 @@ export function GetStorageUsage() {
 
 export function ListDirectory(arg1) {
   return window['go']['kfiles']['FileBrowser']['ListDirectory'](arg1);
+}
+
+export function ListDirectoryRFG(arg1) {
+  return window['go']['kfiles']['FileBrowser']['ListDirectoryRFG'](arg1);
 }
 
 export function MoveItem(arg1, arg2) {
@@ -80,6 +96,10 @@ export function UploadFile(arg1, arg2, arg3, arg4) {
 
 export function UploadFileWithModel(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['kfiles']['FileBrowser']['UploadFileWithModel'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function UploadFileWithModelRFG(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['kfiles']['FileBrowser']['UploadFileWithModelRFG'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function WriteSettingsFile(arg1) {

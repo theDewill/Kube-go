@@ -11,6 +11,10 @@ import {
   SearchFiles,
   ReadSettingsFile,
   WriteSettingsFile,
+  CompressItem,
+  DecompressItem,
+  ListDirectoryRFG,
+  UploadFileWithModelRFG,
 } from "@/../wailsjs/go/kfiles/FileBrowser";
 import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 
@@ -80,6 +84,56 @@ export class FileBrowserAPI {
     }
   }
 
+  static async listDirectoryRFG(path: string = "/"): Promise<DirectoryContents> {
+    try {
+      const items = await ListDirectoryRFG(path);
+
+      // Separate files and folders
+      const files: FileType[] = [];
+      const folders: Folder[] = [];
+
+      for (const item of items) {
+        if (item.type === "folder") {
+          folders.push({
+            id: item.id,
+            name: item.name,
+            type: "folder",
+            path: item.path,
+            itemCount: item.itemCount,
+            lastModified: item.lastModified,
+            lastModifiedDate: new Date(item.lastModifiedDate),
+            owner: item.owner,
+            isShared: item.isShared,
+            sharedWith: item.sharedWith || [],
+          });
+        } else {
+          files.push({
+            id: item.id,
+            name: item.name,
+            type: "file",
+            extension: item.extension,
+            path: item.path,
+            size: item.size,
+            sizeInBytes: item.sizeInBytes,
+            lastModified: item.lastModified,
+            lastModifiedDate: new Date(item.lastModifiedDate),
+            isRefrigerated: item.isRefrigerated,
+            compressionRatio: item.compressionRatio,
+            owner: item.owner,
+            isShared: item.isShared,
+            sharedWith: item.sharedWith || [],
+            isDistributed: item.isDistributed || false,
+          });
+        }
+      }
+
+      return { files, folders };
+    } catch (error) {
+      console.error("Error listing directory:", error);
+      throw error;
+    }
+  }
+
   // Create a new folder
   static async createFolder(path: string, name: string): Promise<void> {
     try {
@@ -96,6 +150,25 @@ export class FileBrowserAPI {
       await RenameItem(path, newName);
     } catch (error) {
       console.error("Error renaming item:", error);
+      throw error;
+    }
+  }
+
+  static async compressItem(path: string, newName: string): Promise<void> {
+    try {
+      await CompressItem(path);
+    } catch (error) {
+      console.error("Error compressing item:", error);
+      throw error;
+    }
+  }
+
+  static async decompressItem(filePath: string): Promise<void> {
+    try {
+      // Call your Wails binding
+      await DecompressItem(filePath);
+    } catch (error) {
+      console.error("Error decompressing file:", error);
       throw error;
     }
   }
@@ -136,6 +209,24 @@ export class FileBrowserAPI {
       // Convert Uint8Array to regular array for Wails compatibility
       const byteArray = Array.from(bytes);
       await UploadFileWithModel(path, file.name, byteArray, distribute, modelType);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      throw error;
+    }
+  }
+
+  static async uploadFileRFG(
+    path: string,
+    file: File,
+    distribute: boolean = false,
+    modelType: string = "ollama",
+  ): Promise<void> {
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      // Convert Uint8Array to regular array for Wails compatibility
+      const byteArray = Array.from(bytes);
+      await UploadFileWithModelRFG(path, file.name, byteArray, distribute, modelType);
     } catch (error) {
       console.error("Error uploading file:", error);
       throw error;
