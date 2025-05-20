@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -21,19 +20,15 @@ const (
 	HeaderMagic = "KBE1" // File format identifier
 )
 
-func main() {
-	// Parse command line arguments
-	modePtr := flag.String("mode", "", "Mode of operation: compress or decompress")
-	inputPtr := flag.String("input", "", "Input file path")
-	flag.Parse()
+func Compressor(modePtr string, inputDir string, outputDir string) {
 
 	// Validate arguments
-	if *modePtr != "compress" && *modePtr != "decompress" {
+	if modePtr != "compress" && modePtr != "decompress" {
 		fmt.Println("Error: mode must be either 'compress' or 'decompress'")
 		os.Exit(1)
 	}
 
-	if *inputPtr == "" {
+	if inputDir == "" {
 		fmt.Println("Error: input file path is required")
 		os.Exit(1)
 	}
@@ -41,14 +36,14 @@ func main() {
 	startTime := time.Now()
 
 	// Execute the appropriate mode
-	if *modePtr == "compress" {
-		err := compressFile(*inputPtr)
+	if modePtr == "compress" {
+		err := compressFile(inputDir, outputDir)
 		if err != nil {
 			fmt.Printf("Compression error: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
-		err := decompressFile(*inputPtr)
+		err := decompressFile(inputDir, outputDir)
 		if err != nil {
 			fmt.Printf("Decompression error: %v\n", err)
 			os.Exit(1)
@@ -60,7 +55,7 @@ func main() {
 }
 
 // compressFile compresses a file using our improved approach
-func compressFile(inputPath string) error {
+func compressFile(inputPath string, outputDir string) error {
 	// Open input file
 	inputFile, err := os.Open(inputPath)
 	if err != nil {
@@ -76,7 +71,19 @@ func compressFile(inputPath string) error {
 	fileSize := fileInfo.Size()
 
 	// Create output file with .kbe extension
-	outputPath := inputPath + ".kbe"
+	//outputPath := inputPath + ".kbe"
+	var outputPath string
+	if outputDir == "" {
+		outputPath = inputPath + ".kbe"
+	} else {
+		fileName := filepath.Base(inputPath) + ".kbe"
+		outputPath = filepath.Join(outputDir, fileName)
+
+		// Create output directory if it doesn't exist
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
+	}
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
@@ -459,7 +466,7 @@ func calculateRMSE(points []float64, coeffs []float64) float64 {
 }
 
 // decompressFile decompresses a file
-func decompressFile(inputPath string) error {
+func decompressFile(inputPath string, outputDir string) error {
 	// Verify file extension
 	if filepath.Ext(inputPath) != ".kbe" {
 		return fmt.Errorf("input file must have .kbe extension for decompression")
@@ -498,7 +505,19 @@ func decompressFile(inputPath string) error {
 	}
 
 	// Create output file (removing .kbe extension)
-	outputPath := strings.TrimSuffix(inputPath, ".kbe")
+	//outputPath := strings.TrimSuffix(inputPath, ".kbe")
+	var outputPath string
+	if outputDir == "" {
+		outputPath = strings.TrimSuffix(inputPath, ".kbe")
+	} else {
+		fileName := strings.TrimSuffix(filepath.Base(inputPath), ".kbe")
+		outputPath = filepath.Join(outputDir, fileName)
+
+		// Create output directory if it doesn't exist
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
+	}
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
