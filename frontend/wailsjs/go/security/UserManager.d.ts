@@ -4,9 +4,13 @@ import {security} from '../models';
 
 export function CleanupExpiredSessions():Promise<void>;
 
+export function DeleteUser(arg1:number):Promise<void>;
+
 export function GetCurrentUser(arg1:string):Promise<security.User>;
 
 export function IsUserAdmin(arg1:number):Promise<boolean>;
+
+export function ListUsers():Promise<Array<security.User>>;
 
 export function LoginWithCredentials(arg1:string,arg2:string):Promise<security.AuthResponse>;
 

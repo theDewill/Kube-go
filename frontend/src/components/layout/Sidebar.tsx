@@ -18,6 +18,7 @@ import {
   PieChart,
   Snowflake,
   Brain,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
@@ -52,6 +53,8 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
       navigate("/finder");
     } else if (path === "Settings") {
       navigate("/settings");
+    } else if (path === "UserManager") {
+      navigate("/users");
     } else {
       toast.info(`Navigating to ${path} (coming soon)`);
     }
@@ -63,6 +66,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
     if (path === "Refrigerated" && location.pathname === "/refrigerated") return true;
     if (path === "finder" && location.pathname === "/finder") return true;
     if (path === "Settings" && location.pathname === "/settings") return true;
+    if (path === "UserManager" && location.pathname === "/users") return true;
     return false;
   };
 
@@ -167,6 +171,14 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             isOpen={isOpen}
             isActive={isActive("Nodes")}
             onClick={() => handleNavigation("Nodes")}
+          />
+
+          <SidebarItem
+            icon={UserRound}
+            label="User Manager"
+            isOpen={isOpen}
+            isActive={isActive("UserManager")}
+            onClick={() => handleNavigation("UserManager")}
           />
           {/* <SidebarItem
             icon={HardDrive}

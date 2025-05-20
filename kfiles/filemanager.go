@@ -297,8 +297,9 @@ func GetPlatformSpecificPath() (string, error) {
 }
 
 // GetCurrentPath returns the absolute path for a relative path within kubeloads
-func (fb *FileBrowser) GetCurrentPathOld(relativePath string) string {
+func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 	// Replace forward slashes for Windows compatibility
+	print("REALTIVE PATH REQUESTED-->", relativePath)
 	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
 
 	// If it's the root, return the kubeloads directory
@@ -315,7 +316,7 @@ func (fb *FileBrowser) GetCurrentPathOld(relativePath string) string {
 }
 
 // GetCurrentPath returns the absolute path for a relative path within kubeloads
-func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
+func (fb *FileBrowser) GetCurrentPathNew(relativePath string) string {
 	// Replace forward slashes for Windows compatibility
 	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
 

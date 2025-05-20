@@ -12,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import Finder from "./pages/Finder";
 import Settings from "./pages/Settings";
 import { LoginForm } from "@/components/auth/LoginForm";
+import UserManagement from "./pages/UserManager";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const AppRouter = () => {
         <Route path="/nodes" element={<Nodes />} />
         <Route path="/refrigerated" element={<Refrigerated />} />
         <Route path="/finder" element={<Finder />} />
+        <Route path="/users" element={<UserManagement />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/login" element={<Index />} />
         <Route path="*" element={<NotFound />} />

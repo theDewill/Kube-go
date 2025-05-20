@@ -6,12 +6,20 @@ export function CleanupExpiredSessions() {
   return window['go']['security']['UserManager']['CleanupExpiredSessions']();
 }
 
+export function DeleteUser(arg1) {
+  return window['go']['security']['UserManager']['DeleteUser'](arg1);
+}
+
 export function GetCurrentUser(arg1) {
   return window['go']['security']['UserManager']['GetCurrentUser'](arg1);
 }
 
 export function IsUserAdmin(arg1) {
   return window['go']['security']['UserManager']['IsUserAdmin'](arg1);
+}
+
+export function ListUsers() {
+  return window['go']['security']['UserManager']['ListUsers']();
 }
 
 export function LoginWithCredentials(arg1, arg2) {

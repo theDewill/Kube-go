@@ -42,8 +42,8 @@ export function GetCurrentPath(arg1) {
   return window['go']['kfiles']['FileBrowser']['GetCurrentPath'](arg1);
 }
 
-export function GetCurrentPathOld(arg1) {
-  return window['go']['kfiles']['FileBrowser']['GetCurrentPathOld'](arg1);
+export function GetCurrentPathNew(arg1) {
+  return window['go']['kfiles']['FileBrowser']['GetCurrentPathNew'](arg1);
 }
 
 export function GetFileInfo(arg1) {

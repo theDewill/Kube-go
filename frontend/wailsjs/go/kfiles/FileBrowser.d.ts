@@ -22,7 +22,7 @@ export function GenerateFileDescriptionWithModel(arg1:string,arg2:string,arg3:st
 
 export function GetCurrentPath(arg1:string):Promise<string>;
 
-export function GetCurrentPathOld(arg1:string):Promise<string>;
+export function GetCurrentPathNew(arg1:string):Promise<string>;
 
 export function GetFileInfo(arg1:string):Promise<kfiles.FileType>;
 

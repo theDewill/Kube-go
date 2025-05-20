@@ -765,3 +765,115 @@ func (um *UserManager) CleanupExpiredSessions() error {
 
 	return nil
 }
+
+// ListUsers returns all registered users
+func (um *UserManager) ListUsers() ([]*User, error) {
+	db, err := sql.Open("sqlite3", um.dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`
+        SELECT id, email, facial_data_id, created_at, last_login_at, is_active, has_facial_auth, is_admin
+        FROM users
+        ORDER BY created_at DESC
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	users := []*User{}
+	for rows.Next() {
+		user := &User{}
+		var lastLoginAt sql.NullTime
+		var facialDataID sql.NullString
+
+		err := rows.Scan(
+			&user.ID,
+			&user.Email,
+			&facialDataID,
+			&user.CreatedAt,
+			&lastLoginAt,
+			&user.IsActive,
+			&user.HasFacialAuth,
+			&user.IsAdmin,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning user row: %w", err)
+		}
+
+		// Handle NULL values
+		if facialDataID.Valid {
+			user.FacialDataID = facialDataID.String
+		}
+		if lastLoginAt.Valid {
+			user.LastLoginAt = &lastLoginAt.Time
+		}
+
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating user rows: %w", err)
+	}
+
+	return users, nil
+}
+
+// DeleteUser removes a user and their facial data from the system
+func (um *UserManager) DeleteUser(userID int) error {
+	db, err := sql.Open("sqlite3", um.dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Start a transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Get user's facial data ID before deletion
+	var facialDataID sql.NullString
+	err = tx.QueryRow("SELECT facial_data_id FROM users WHERE id = ?", userID).Scan(&facialDataID)
+	if err != nil {
+		tx.Rollback()
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to get user facial data: %w", err)
+	}
+
+	// Delete user sessions
+	_, err = tx.Exec("DELETE FROM user_sessions WHERE user_id = ?", userID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user sessions: %w", err)
+	}
+
+	// If facial data exists, delete it
+	if facialDataID.Valid && facialDataID.String != "" {
+		_, err = tx.Exec("DELETE FROM face_features WHERE id = ?", facialDataID.String)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to delete facial data: %w", err)
+		}
+	}
+
+	// Delete the user
+	_, err = tx.Exec("DELETE FROM users WHERE id = ?", userID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}

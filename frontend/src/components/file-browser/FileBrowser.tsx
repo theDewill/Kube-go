@@ -169,7 +169,7 @@ export function FileUpload({ onUpload, isUploading }) {
 
 export function FileBrowser() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [currentPath, setCurrentPath] = useState("/");
+  const [currentPath, setCurrentPath] = useState("/kubeloads");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
