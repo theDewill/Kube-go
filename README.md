@@ -10,3 +10,7 @@ eg:- in darwin (macos) -> sh darwin_install.sh
 3) Then execute one from the following command based on your desire:
      1. wails dev  - this command will instantly run the kube application without building in dev mode
      2. wails build - this commands will build the app and you can see the directory path the binary was placed within command results, then go tp that directory and execute that executable
+
+
+Set-ExecutionPolicy Bypass -Scope Process -Force
+iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/hybridgroup/gocv/release/win_build_opencv.ps1'))
