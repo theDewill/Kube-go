@@ -733,8 +733,7 @@ func (nr *NodeRegistry) requestChunkFromNode(chunkID string, nodeID string) ([]b
 
 // encryptData encrypts the given data using AES-256-GCM
 func encryptData(data []byte) ([]byte, error) {
-	// For a real implementation, you'd use a proper key management system
-	// This is a simplified version for demonstration
+
 	key := make([]byte, 32) // AES-256 key
 	if _, err := rand.Read(key); err != nil {
 		return nil, fmt.Errorf("failed to generate key: %w", err)

@@ -14,7 +14,9 @@ export function DecompressItem(arg1:string):Promise<void>;
 
 export function DeleteItem(arg1:string):Promise<void>;
 
-export function DownloadFile(arg1:string):Promise<Array<number>>;
+export function DownloadFile(arg1:string):Promise<void>;
+
+export function DownloadFileOld(arg1:string):Promise<Array<number>>;
 
 export function GenerateFileDescription(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
@@ -22,7 +24,7 @@ export function GenerateFileDescriptionWithModel(arg1:string,arg2:string,arg3:st
 
 export function GetCurrentPath(arg1:string):Promise<string>;
 
-export function GetCurrentPathNew(arg1:string):Promise<string>;
+export function GetCurrentPathOld(arg1:string):Promise<string>;
 
 export function GetFileInfo(arg1:string):Promise<kfiles.FileType>;
 

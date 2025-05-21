@@ -185,13 +185,13 @@ const Refrigerated = () => {
 
                     <div className="flex space-x-2">
                       <Button
-                        className="relative flex-1 overflow-hidden group bg-icebox-600 hover:bg-icebox-700"
+                        className="relative flex-1 overflow-hidden group bg-orange-400 hover:bg-orange-500"
                         onClick={compressFile}
                         disabled={isCompressing}
                         variant="default"
                       >
                         <span className="flex items-center">
-                          <Hammer className="h-5 w-5 mr-2 text-icebox-900 group-hover:animate-pulse" />
+                          <Hammer className="h-5 w-5 mr-2 text-black group-hover:animate-pulse" />
                           {isCompressing ? "Refrigerating..." : "Refrigerate"}
                         </span>
                       </Button>
@@ -293,8 +293,8 @@ const Refrigerated = () => {
                         className="flex items-center justify-between p-3 bg-sidebar/5 rounded-md hover:bg-sidebar/10"
                       >
                         <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-icebox-100 dark:bg-icebox-900 rounded-md">
-                            <Hammer className="h-4 w-4 text-icebox-600" />
+                          <div className="p-2 bg-icebox-300 dark:bg-icebox-900 rounded-md">
+                            <Hammer className="h-4 w-4 dark:text-white text-icebox-60" />
                           </div>
                           <div>
                             <p className="font-medium text-sm">{file.name}</p>

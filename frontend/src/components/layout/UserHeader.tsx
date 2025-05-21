@@ -46,7 +46,7 @@ export function UserHeader({ toggleSidebar }: UserHeaderProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
 
   const handleLogout = async () => {

@@ -230,7 +230,7 @@ export function FileList({ files, folders, onFolderClick, onContextAction }: Fil
               <Checkbox />
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort("name")}>
-              <div className="flex items-center space-x-1">
+              <div className="flex justify-center items-center space-x-1">
                 <span>Name</span>
                 {sortField === "name" &&
                   (sortDirection === "asc" ? (

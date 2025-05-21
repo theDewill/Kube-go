@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Server, User, Lock, AlertCircle } from "lucide-react";
+import { Server, User, Lock, AlertCircle, Shield, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 import { GetNodesForFrontend } from "@/../wailsjs/go/kubenet/NodeRegistry";
 
@@ -16,6 +28,11 @@ interface Node {
   isLocal: boolean;
 }
 
+// Add accessibility property to track node accessibility settings
+interface NodeWithAccessibility extends Node {
+  isAccessible: boolean;
+}
+
 // Connections will be calculated based on the network topology
 interface Connection {
   source: string;
@@ -29,11 +46,16 @@ interface NodeNetworkProps {
 
 export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<Array<any>>([]);
+  const [nodes, setNodes] = useState<Array<NodeWithAccessibility>>([]);
   const [connections, setConnections] = useState<Array<Connection>>([]);
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Dialog state
+  const [selectedNode, setSelectedNode] = useState<NodeWithAccessibility | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isAccessible, setIsAccessible] = useState(true);
 
   // Function to fetch nodes from the backend
   const fetchNodes = async () => {
@@ -101,6 +123,10 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
           break;
       }
 
+      // Add accessibility property - check if we already have this node and keep its state
+      const existingNode = nodes.find((n) => n.id === node.id);
+      const isAccessible = existingNode ? existingNode.isAccessible : true; // Default to true for new nodes
+
       return {
         ...node,
         x,
@@ -109,6 +135,7 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
         name: node.hostname,
         status: uiStatus,
         isClickable: uiStatus !== "offline",
+        isAccessible,
       };
     });
 
@@ -180,6 +207,43 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
       fetchNodes(); // Re-process nodes with new container size
     }
   }, [containerSize.width, containerSize.height]);
+
+  // Handle node click to open dialog
+  const handleNodeClick = (node: NodeWithAccessibility) => {
+    if (node.status === "offline") return; // Don't open dialog for offline nodes
+
+    setSelectedNode(node);
+    setIsAccessible(node.isAccessible);
+    setDialogOpen(true);
+  };
+
+  // Handle access button click
+  const handleAccessNode = () => {
+    if (selectedNode && selectedNode.isAccessible) {
+      setDialogOpen(false);
+      onNodeClick(selectedNode.id);
+    }
+  };
+
+  // Handle accessibility toggle
+  const handleAccessibilityToggle = (enabled: boolean) => {
+    setIsAccessible(enabled);
+
+    // Update the node's accessibility in the state
+    if (selectedNode) {
+      setNodes((prev) =>
+        prev.map((node) =>
+          node.id === selectedNode.id ? { ...node, isAccessible: enabled } : node,
+        ),
+      );
+
+      // Also update selected node
+      setSelectedNode({
+        ...selectedNode,
+        isAccessible: enabled,
+      });
+    }
+  };
 
   // Draw a straight line between two nodes
   const drawLine = (sourceNode: any, targetNode: any) => {
@@ -292,6 +356,7 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
           const isClickable = node.status !== "offline" && node.isClickable;
           const isServer = node.type === "server";
           const isLocked = node.status === "away";
+          const isAccessible = node.isAccessible;
 
           // Choose the appropriate icon
           let IconComponent;
@@ -335,7 +400,7 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                       top: node.y,
                       filter: !isClickable ? "blur(1px)" : "none",
                     }}
-                    onClick={() => isClickable && onNodeClick(node.id)}
+                    onClick={() => isClickable && handleNodeClick(node)}
                   >
                     <div className={`${nodeColors.bg} p-4 rounded-full ${nodeColors.border}`}>
                       <IconComponent className={`h-8 w-8 ${nodeColors.text}`} />
@@ -348,6 +413,11 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                     {node.status === "away" && (
                       <div className="absolute -top-1 -right-1 bg-yellow-500 p-1 rounded-full">
                         <AlertCircle className="h-3 w-3 text-white" />
+                      </div>
+                    )}
+                    {!node.isAccessible && node.status !== "offline" && (
+                      <div className="absolute -top-1 -right-1 bg-red-500 p-1 rounded-full">
+                        <Shield className="h-3 w-3 text-white" />
                       </div>
                     )}
                     <div className="absolute mt-10 text-center font-medium text-sm whitespace-nowrap">
@@ -379,7 +449,11 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
                       Last seen: {new Date(node.lastSeen).toLocaleTimeString()}
                     </span>
                     {isClickable ? (
-                      <span className="text-xs text-muted-foreground">Click to connect</span>
+                      node.isAccessible ? (
+                        <span className="text-xs text-muted-foreground">Click to connect</span>
+                      ) : (
+                        <span className="text-xs text-red-500">Access restricted</span>
+                      )
                     ) : (
                       <span className="text-xs text-muted-foreground">Not available</span>
                     )}
@@ -390,6 +464,91 @@ export function NodeNetwork({ onNodeClick }: NodeNetworkProps) {
           );
         })}
       </div>
+
+      {/* Node Access Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Node Connection Settings</DialogTitle>
+            <DialogDescription>
+              Configure access settings for {selectedNode?.hostname}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 items-center gap-4">
+              <div>
+                <h3 className="text-lg font-medium">Node Details</h3>
+                <p className="text-sm text-muted-foreground">
+                  {selectedNode?.hostname} ({selectedNode?.ip})
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Badge
+                  variant={selectedNode?.status === "online" ? "success" : "warning"}
+                  className="text-xs"
+                >
+                  {selectedNode?.status}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="node-accessibility"
+                checked={isAccessible}
+                onCheckedChange={handleAccessibilityToggle}
+              />
+              <Label htmlFor="node-accessibility" className="flex items-center cursor-pointer">
+                <Shield className="h-4 w-4 mr-2 text-primary" />
+                Allow access to this node
+              </Label>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              {isAccessible
+                ? "This node can be accessed from your local machine."
+                : "Access to this node is restricted for both parties."}
+            </div>
+
+            {/* Additional node info */}
+            <div className="mt-2 space-y-2 p-3 bg-sidebar/5 rounded-md">
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Connection Type</span>
+                <span className="text-sm font-medium">
+                  {selectedNode?.type === "server" ? "Server" : "Client"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Last Communication</span>
+                <span className="text-sm font-medium">
+                  {selectedNode?.lastSeen
+                    ? new Date(selectedNode.lastSeen).toLocaleString()
+                    : "Unknown"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Protocol Version</span>
+                <span className="text-sm font-medium">{selectedNode?.version || "Unknown"}</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAccessNode}
+              disabled={!isAccessible}
+              className={!isAccessible ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Access Node
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -30,6 +30,10 @@ export function DownloadFile(arg1) {
   return window['go']['kfiles']['FileBrowser']['DownloadFile'](arg1);
 }
 
+export function DownloadFileOld(arg1) {
+  return window['go']['kfiles']['FileBrowser']['DownloadFileOld'](arg1);
+}
+
 export function GenerateFileDescription(arg1, arg2, arg3, arg4) {
   return window['go']['kfiles']['FileBrowser']['GenerateFileDescription'](arg1, arg2, arg3, arg4);
 }
@@ -42,8 +46,8 @@ export function GetCurrentPath(arg1) {
   return window['go']['kfiles']['FileBrowser']['GetCurrentPath'](arg1);
 }
 
-export function GetCurrentPathNew(arg1) {
-  return window['go']['kfiles']['FileBrowser']['GetCurrentPathNew'](arg1);
+export function GetCurrentPathOld(arg1) {
+  return window['go']['kfiles']['FileBrowser']['GetCurrentPathOld'](arg1);
 }
 
 export function GetFileInfo(arg1) {

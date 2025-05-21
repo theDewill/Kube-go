@@ -168,17 +168,27 @@ export function FileUpload({ onUpload, isUploading }) {
 }
 
 export function FileBrowser() {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState("grid");
   const [currentPath, setCurrentPath] = useState("/kubeloads");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [files, setFiles] = useState<File[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
+  const [files, setFiles] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
   const [networkNodes, setNetworkNodes] = useState([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
+
+  // State for rename dialog
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [itemToRename, setItemToRename] = useState(null);
+  const [newItemName, setNewItemName] = useState("");
+
+  // State for refrigerate dialog
+  const [refrigerateDialogOpen, setRefrigerateDialogOpen] = useState(false);
+  const [itemToRefrigerate, setItemToRefrigerate] = useState(null);
+  const [refrigerateName, setRefrigerateName] = useState("");
 
   // Fetch network nodes
   useEffect(() => {
@@ -253,11 +263,43 @@ export function FileBrowser() {
     }
   };
 
+  const handleRename = async () => {
+    if (!newItemName.trim() || !itemToRename) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+
+    try {
+      await FileBrowserAPI.renameItem(itemToRename.path, newItemName);
+      toast.success(`Renamed ${itemToRename.name} to ${newItemName}`);
+      setRenameDialogOpen(false);
+      await loadDirectoryContents();
+    } catch (err) {
+      toast.error(`Failed to rename: ${err}`);
+    }
+  };
+
+  const handleRefrigerate = async () => {
+    if (!refrigerateName.trim() || !itemToRefrigerate) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+
+    try {
+      await FileBrowserAPI.compressItem(itemToRefrigerate.path, refrigerateName);
+      toast.success(`Refrigerated ${itemToRefrigerate.name} to ${refrigerateName}`);
+      setRefrigerateDialogOpen(false);
+      await loadDirectoryContents();
+    } catch (err) {
+      toast.error(`Failed to refrigerate: ${err}`);
+    }
+  };
+
   const showFilters = () => {
     toast.info("Advanced filters coming soon");
   };
 
-  const handleUpload = async (file: File, distribute: boolean, modelType: string) => {
+  const handleUpload = async (file, distribute, modelType) => {
     setIsUploading(true);
     try {
       await FileBrowserAPI.uploadFile(currentPath, file, distribute, modelType);
@@ -270,11 +312,11 @@ export function FileBrowser() {
     }
   };
 
-  const navigateToFolder = (path: string) => {
+  const navigateToFolder = (path) => {
     setCurrentPath(path);
   };
 
-  const handleContextAction = async (action: string, item: File | Folder) => {
+  const handleContextAction = async (action, item) => {
     try {
       switch (action) {
         case "Delete":
@@ -282,28 +324,16 @@ export function FileBrowser() {
           toast.success(`${item.name} deleted`);
           await loadDirectoryContents();
           break;
-        case "Rename": {
-          // This would typically open a dialog to get the new name
-          console.log("rename clicked");
-          const newName = prompt("Enter new name:", item.name);
-          if (newName && newName !== item.name) {
-            await FileBrowserAPI.renameItem(item.path, newName);
-            toast.success(`Renamed ${item.name} to ${newName}`);
-            await loadDirectoryContents();
-          }
+        case "Rename":
+          setItemToRename(item);
+          setNewItemName(item.name);
+          setRenameDialogOpen(true);
           break;
-        }
-        case "Refrigirate": {
-          // This would typically open a dialog to get the new name
-          console.log("Refrierate clicked");
-          const newName = prompt("Enter new name:", item.name);
-          if (newName && newName !== item.name) {
-            await FileBrowserAPI.compressItem(item.path, newName);
-            toast.success(`Renamed ${item.name} to ${newName}`);
-            await loadDirectoryContents();
-          }
+        case "Refrigirate":
+          setItemToRefrigerate(item);
+          setRefrigerateName(item.name);
+          setRefrigerateDialogOpen(true);
           break;
-        }
         case "Download":
           if (item.type === "file") {
             const blob = await FileBrowserAPI.downloadFile(item.path);
@@ -412,6 +442,66 @@ export function FileBrowser() {
           <FileUpload onUpload={handleUpload} isUploading={isUploading} />
         </div>
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Rename Item</DialogTitle>
+            <DialogDescription>Enter a new name for {itemToRename?.name}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="newName" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="newName"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="col-span-3"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={handleRename}>
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refrigerate Dialog */}
+      <Dialog open={refrigerateDialogOpen} onOpenChange={setRefrigerateDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Refrigerate Item</DialogTitle>
+            <DialogDescription>
+              Enter a name for the compressed version of {itemToRefrigerate?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="refrigerateName" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="refrigerateName"
+                value={refrigerateName}
+                onChange={(e) => setRefrigerateName(e.target.value)}
+                className="col-span-3"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={handleRefrigerate}>
+              Refrigerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="mt-6 flex-1 overflow-auto">
         {isLoading ? (

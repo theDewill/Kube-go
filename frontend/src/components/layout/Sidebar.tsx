@@ -19,6 +19,7 @@ import {
   Snowflake,
   Brain,
   UserRound,
+  Hammer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
@@ -97,7 +98,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
         <nav className="grid gap-1 px-2">
           <SidebarItem
             icon={FolderOpen}
-            label="My Files"
+            label="File Manager"
             isOpen={isOpen}
             isActive={isActive("Home")}
             onClick={() => handleNavigation("Home")}
@@ -117,7 +118,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
             onClick={() => handleNavigation("Finder")}
           />
           <SidebarItem
-            icon={Snowflake}
+            icon={Hammer}
             label="Refrigerator"
             isOpen={isOpen}
             isActive={isActive("Refrigerated")}
@@ -167,7 +168,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
           /> */}
           <SidebarItem
             icon={Server}
-            label="Network"
+            label="Network Space"
             isOpen={isOpen}
             isActive={isActive("Nodes")}
             onClick={() => handleNavigation("Nodes")}

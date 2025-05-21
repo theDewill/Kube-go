@@ -297,7 +297,7 @@ func GetPlatformSpecificPath() (string, error) {
 }
 
 // GetCurrentPath returns the absolute path for a relative path within kubeloads
-func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
+func (fb *FileBrowser) GetCurrentPathOld(relativePath string) string {
 	// Replace forward slashes for Windows compatibility
 	print("REALTIVE PATH REQUESTED-->", relativePath)
 	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
@@ -316,7 +316,7 @@ func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 }
 
 // GetCurrentPath returns the absolute path for a relative path within kubeloads
-func (fb *FileBrowser) GetCurrentPathNew(relativePath string) string {
+func (fb *FileBrowser) GetCurrentPath(relativePath string) string {
 	// Replace forward slashes for Windows compatibility
 	relativePath = strings.ReplaceAll(relativePath, "/", string(os.PathSeparator))
 
@@ -451,6 +451,13 @@ func (fb *FileBrowser) UploadFile(directoryPath string, fileName string, fileDat
 
 // UploadFileWithModel saves an uploaded file with specified LLM model for description generation
 // FILEMANAGER
+func cleanTargetDir(targetDir string) string {
+	count := strings.Count(targetDir, "/kubeloads")
+	if count >= 2 {
+		return strings.Replace(targetDir, "/kubeloads", "", 1)
+	}
+	return targetDir
+}
 func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string, fileData []byte, distribute bool, modelType string) error {
 	if !isValidName(fileName) {
 		return errors.New("invalid file name")
@@ -466,7 +473,10 @@ func (fb *FileBrowser) UploadFileWithModel(directoryPath string, fileName string
 
 	// Create the target path in kubeloads
 	relativePath := strings.TrimPrefix(directoryPath, "/")
-	targetDir := filepath.Join(fb.KubeLoadsDir, relativePath)
+	RAWtargetDir := filepath.Join(fb.KubeLoadsDir, relativePath)
+
+	targetDir := cleanTargetDir(RAWtargetDir)
+	print("<-------UPLOAD TARGET----->", targetDir)
 
 	// Ensure the directory exists
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -867,7 +877,7 @@ func (fb *FileBrowser) ListDirectory(path string) ([]FileType, error) {
 }
 
 // DownloadFile downloads a file, reassembling it if it's distributed
-func (fb *FileBrowser) DownloadFile(path string) ([]byte, error) {
+func (fb *FileBrowser) DownloadFileOld(path string) ([]byte, error) {
 	// First, check if the file exists directly
 	filePath := fb.GetCurrentPath(path)
 
@@ -909,6 +919,144 @@ func (fb *FileBrowser) DownloadFile(path string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+func (fb *FileBrowser) DownloadFile(path string) error {
+	// Get the file data using the existing logic
+	fileData, err := fb.getFileData(path)
+	if err != nil {
+		return fmt.Errorf("failed to get file data: %w", err)
+	}
+
+	// Get just the filename
+	fileName := filepath.Base(path)
+
+	// Get the platform-specific download directory
+	downloadDir, err := getDownloadDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get download directory: %w", err)
+	}
+
+	// Create the full destination path
+	destPath := filepath.Join(downloadDir, fileName)
+
+	// Write the file to the download directory
+	if err := ioutil.WriteFile(destPath, fileData, 0644); err != nil {
+		return fmt.Errorf("failed to write file to download directory: %w", err)
+	}
+
+	fmt.Printf("File downloaded to: %s\n", destPath)
+	return nil
+}
+
+// getFileData extracts the file retrieval logic from the original function
+func (fb *FileBrowser) getFileData(path string) ([]byte, error) {
+	// First, check if the file exists directly
+	filePath := fb.GetCurrentPath(path)
+	// Get just the filename
+	fileName := filepath.Base(path)
+	// Check if it's a distributed file
+	isDistributed, fileID, err := fb.isDistributedFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if file is distributed: %w", err)
+	}
+	if isDistributed {
+		// Create a temporary file for reassembly
+		tempFile := filepath.Join(os.TempDir(), fileName)
+		// Reassemble the file
+		if err := fb.NodeRegistry.ReassembleFile(fileID, tempFile, fb.KubeRestsDir, fb.DbPath); err != nil {
+			return nil, fmt.Errorf("failed to reassemble file: %w", err)
+		}
+		// Read the reassembled file
+		data, err := ioutil.ReadFile(tempFile)
+		// Clean up temp file
+		os.Remove(tempFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read reassembled file: %w", err)
+		}
+		return data, nil
+	}
+	// It's not distributed, just read it directly
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	return data, nil
+}
+
+// getDownloadDirectory returns the platform-specific download directory
+func getDownloadDirectory() (string, error) {
+	var downloadDir string
+
+	switch runtime.GOOS {
+	case "windows":
+		// On Windows, use the User Downloads folder
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		downloadDir = filepath.Join(home, "Downloads")
+	case "darwin":
+		// On macOS, use the User Downloads folder
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		downloadDir = filepath.Join(home, "Downloads")
+	case "linux":
+		// On Linux, use the XDG_DOWNLOAD_DIR if available, otherwise fall back to ~/Downloads
+		xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
+		if xdgConfigHome == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to get user home directory: %w", err)
+			}
+			xdgConfigHome = filepath.Join(home, ".config")
+		}
+
+		// Try to read user-dirs.dirs file to get the XDG_DOWNLOAD_DIR
+		userDirsFile := filepath.Join(xdgConfigHome, "user-dirs.dirs")
+		if _, err := os.Stat(userDirsFile); err == nil {
+			content, err := ioutil.ReadFile(userDirsFile)
+			if err == nil {
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.HasPrefix(line, "XDG_DOWNLOAD_DIR=") {
+						value := strings.Trim(strings.SplitN(line, "=", 2)[1], "\"")
+						// Replace $HOME with actual home directory
+						home, err := os.UserHomeDir()
+						if err == nil && strings.HasPrefix(value, "$HOME") {
+							downloadDir = strings.Replace(value, "$HOME", home, 1)
+							break
+						}
+					}
+				}
+			}
+		}
+
+		// If we couldn't determine the download directory from XDG config, use ~/Downloads
+		if downloadDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to get user home directory: %w", err)
+			}
+			downloadDir = filepath.Join(home, "Downloads")
+		}
+	default:
+		// For other platforms, use ~/Downloads as a fallback
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		downloadDir = filepath.Join(home, "Downloads")
+	}
+
+	// Ensure the download directory exists
+	if err := os.MkdirAll(downloadDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create download directory: %w", err)
+	}
+
+	return downloadDir, nil
 }
 
 // isDistributedFile checks if a file is distributed and returns its fileID

@@ -48,7 +48,7 @@ export function LoginForm() {
   const isRequestingRef = useRef(false);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState("credentials");
+  const [activeTab, setActiveTab] = useState("facial");
 
   const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,7 +450,15 @@ export function LoginForm() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div
+      className="flex items-center justify-center min-h-screen"
+      style={{
+        backgroundImage: "url('/kubebg.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Kube Login</CardTitle>
@@ -459,13 +467,13 @@ export function LoginForm() {
         <CardContent>
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="credentials" className="flex items-center gap-2">
-                <Key className="h-4 w-4" />
-                Credentials
-              </TabsTrigger>
               <TabsTrigger value="facial" className="flex items-center gap-2">
                 <Camera className="h-4 w-4" />
                 Facial Login
+              </TabsTrigger>
+              <TabsTrigger value="credentials" className="flex items-center gap-2">
+                <Key className="h-4 w-4" />
+                Credentials
               </TabsTrigger>
             </TabsList>
 

@@ -223,7 +223,7 @@ const UserManagement = () => {
               Node Users
             </CardTitle>
             <CardDescription className="text-blue-600">
-              {users.length} active {users.length === 1 ? "user" : "users"}
+              {users.length} active {users.length === 1 ? "user" : "users"} has access
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -335,33 +335,14 @@ const UserManagement = () => {
                           </TooltipProvider>
                         </TableCell>
                         <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Actions</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem
-                                onClick={() => toast.info("Edit user feature coming soon")}
-                                disabled={user.id === currentUserID}
-                              >
-                                <User className="h-4 w-4 mr-2" />
-                                Edit User
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleDeleteUser(user)}
-                                disabled={user.id === currentUserID}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete User
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Button
+                            variant="outline"
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteUser(user)}
+                            disabled={user.id === currentUserID}
+                          >
+                            Delete
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

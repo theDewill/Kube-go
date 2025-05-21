@@ -21,6 +21,7 @@ const AppRouter = () => {
   const { user, sessionId, isLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
+    //document.documentElement.classList.toggle("dark");
     console.log("Auth state changed:", {
       user: !!user,
       sessionId: !!sessionId,
