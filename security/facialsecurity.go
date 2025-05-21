@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,7 +16,7 @@ import (
 
 const (
 	// Lower thresholds for better detection
-	minSimilarity = 0.6
+	minSimilarity = 0.790
 )
 
 type FacialSystem struct {
@@ -133,6 +134,52 @@ func (fs *FacialSystem) extractFeatures(faceImg gocv.Mat) ([]float64, error) {
 		for x := 0; x < equalized.Cols(); x++ {
 			val := equalized.GetUCharAt(y, x)
 			features = append(features, float64(val)/255.0)
+		}
+	}
+
+	return features, nil
+}
+
+// Enhanced feature extraction with Local Binary Patterns
+func (fs *FacialSystem) extractEnhancedFeatures(faceImg gocv.Mat) ([]float64, error) {
+	// Convert to grayscale
+	gray := gocv.NewMat()
+	defer gray.Close()
+	gocv.CvtColor(faceImg, &gray, gocv.ColorBGRToGray)
+
+	// Resize to standard size
+	resized := gocv.NewMat()
+	defer resized.Close()
+	gocv.Resize(gray, &resized, image.Point{X: 100, Y: 100}, 0, 0, gocv.InterpolationDefault)
+
+	// Apply histogram equalization for lighting invariance
+	equalized := gocv.NewMat()
+	defer equalized.Close()
+	gocv.EqualizeHist(resized, &equalized)
+
+	// Apply LBP-like feature extraction (simplified for Go implementation)
+	// This creates more discriminative features than raw pixel values
+	features := make([]float64, 0, 100*100)
+
+	// For each pixel (excluding borders), compare with 8 neighbors
+	for y := 1; y < equalized.Rows()-1; y++ {
+		for x := 1; x < equalized.Cols()-1; x++ {
+			center := float64(equalized.GetUCharAt(y, x))
+
+			// Extract a simple gradient-based feature
+			gradientSum := 0.0
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					if dx == 0 && dy == 0 {
+						continue
+					}
+					neighbor := float64(equalized.GetUCharAt(y+dy, x+dx))
+					gradientSum += math.Abs(center - neighbor)
+				}
+			}
+
+			// Normalize and add to features
+			features = append(features, gradientSum/8.0/255.0)
 		}
 	}
 

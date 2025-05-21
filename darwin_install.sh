@@ -28,7 +28,7 @@ fi
 
 # Get script directory to locate f_model
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_FILE="$SCRIPT_DIR/f_model/test.xml"
+SOURCE_FILE="$SCRIPT_DIR/f_model/haarcascade_frontalface_alt.xml"
 
 # Copy test.xml file to models directory
 cp "$SOURCE_FILE" "$MODELS_DIR/"

@@ -28,7 +28,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Get script directory to locate f_model
 set "SCRIPT_DIR=%~dp0"
-set "SOURCE_FILE=%SCRIPT_DIR%f_model\test.xml"
+set "SOURCE_FILE=%SCRIPT_DIR%f_model\haarcascade_frontalface_alt.xml"
 
 :: Copy test.xml file to models directory
 copy "%SOURCE_FILE%" "%MODELS_DIR%\" >nul
